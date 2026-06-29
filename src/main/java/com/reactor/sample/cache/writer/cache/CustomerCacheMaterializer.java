@@ -1,8 +1,8 @@
 package com.reactor.sample.cache.writer.cache;
 
-import com.reactor.rust.cache.RustCache;
-import com.reactor.rust.cache.VersionedJsonCache;
-import com.reactor.rust.cache.VersionedJsonCacheWriter.SnapshotResult;
+import com.reactor.rust.cache.core.RustCache;
+import com.reactor.rust.cache.versioned.VersionedJsonCache;
+import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository.CustomerCounts;

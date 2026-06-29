@@ -1,6 +1,6 @@
 package com.reactor.sample.cache.writer.scheduler;
 
-import com.reactor.rust.cache.VersionedJsonCacheWriter.SnapshotResult;
+import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
 import com.reactor.sample.cache.writer.cache.CustomerCacheMaterializer;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 
