@@ -10,7 +10,9 @@ This sample is wired to `com.reactor:java-rust-cache:0.1.0`. The cache dependenc
 
 ## Maven Package Access
 
-This sample pulls `java-rust-cache` from GitHub Packages. Add a GitHub token with `read:packages` access to your Maven `settings.xml`:
+This sample pulls `java-rust-cache` from GitHub Packages. Maven must authenticate before it can download the package; this is GitHub Packages' normal access model.
+
+Add a GitHub token with `read:packages` access to your Maven `settings.xml`. Keep the `<id>` value exactly as shown, because it must match the repository id in this project's `pom.xml`:
 
 ```xml
 <servers>
@@ -22,7 +24,14 @@ This sample pulls `java-rust-cache` from GitHub Packages. Add a GitHub token wit
 </servers>
 ```
 
-Then set `GITHUB_PACKAGES_TOKEN` before running Maven.
+Then set `GITHUB_PACKAGES_TOKEN` before running Maven:
+
+```powershell
+$env:GITHUB_PACKAGES_TOKEN="YOUR_TOKEN_WITH_READ_PACKAGES"
+mvn -q dependency:resolve
+```
+
+If Maven returns `401 Unauthorized`, check the token scope, environment variable, and server id matching first.
 
 ## Real Scenario
 

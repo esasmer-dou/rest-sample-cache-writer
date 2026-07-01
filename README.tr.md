@@ -10,7 +10,9 @@ Bu örnek `com.reactor:java-rust-cache:0.1.0` ile çalışacak şekilde güncell
 
 ## Maven Package Erişimi
 
-Bu örnek `java-rust-cache` bağımlılığını GitHub Packages üzerinden çeker. Maven `settings.xml` dosyana `read:packages` yetkisi olan bir GitHub token eklemelisin:
+Bu örnek `java-rust-cache` bağımlılığını GitHub Packages üzerinden çeker. Maven bu paketi indirebilmek için kimlik bilgisi ister; bu GitHub Packages'in normal erişim modelidir.
+
+Maven `settings.xml` dosyana `read:packages` yetkisi olan bir GitHub token eklemelisin. Aşağıdaki `<id>` değerini aynı bırak; bu değer `pom.xml` içindeki repository id'siyle eşleşmelidir:
 
 ```xml
 <servers>
@@ -22,7 +24,14 @@ Bu örnek `java-rust-cache` bağımlılığını GitHub Packages üzerinden çek
 </servers>
 ```
 
-Maven çalıştırmadan önce `GITHUB_PACKAGES_TOKEN` environment variable olarak verilmelidir.
+Maven çalıştırmadan önce `GITHUB_PACKAGES_TOKEN` environment variable olarak verilmelidir:
+
+```powershell
+$env:GITHUB_PACKAGES_TOKEN="READ_PACKAGES_YETKILI_TOKEN"
+mvn -q dependency:resolve
+```
+
+Maven `401 Unauthorized` dönerse önce token'ın `read:packages` yetkisini, environment variable'ın shell tarafından görüldüğünü ve server id eşleşmesini kontrol et.
 
 ## Gerçek Senaryo
 
