@@ -6,7 +6,7 @@ Minimal PostgreSQL-to-Redis cache writer sample for the Rust-Java ecosystem.
 
 This process does not expose REST and does not use Dubbo. It reads PostgreSQL with ActiveJDBC + HikariCP, builds real-world nested JSON read models, and writes them to Redis through `java-rust-cache`, where Redis I/O is handled by Rust via JNI.
 
-This sample is wired to `com.reactor:java-rust-cache:0.1.0-rc3`. The cache dependency includes the matching Windows/Linux native Redis bridge, so this writer can run without `rust-java-rest` and without a manual `java.library.path`.
+This sample is wired to `com.reactor:java-rust-cache:0.1.0`. The cache dependency includes the matching Windows/Linux native Redis bridge, so this writer can run without `rust-java-rest` and without a manual `java.library.path`.
 
 ## Maven Package Access
 

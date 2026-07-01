@@ -6,7 +6,7 @@ Rust-Java ekosistemi için minimum yüzeyli PostgreSQL-to-Redis cache writer ör
 
 Bu process REST endpoint açmaz ve Dubbo kullanmaz. PostgreSQL verisini ActiveJDBC + HikariCP ile okur, gerçek hayata yakın nested JSON read model üretir ve Redis’e `java-rust-cache` üzerinden yazar. Redis I/O tarafı Rust tarafından JNI ile yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.1.0-rc3` ile çalışacak şekilde güncellendi. Cache dependency’si matching Windows/Linux native Redis bridge binary’sini içerir; bu yüzden writer `rust-java-rest` olmadan ve manuel `java.library.path` vermeden çalışabilir.
+Bu örnek `com.reactor:java-rust-cache:0.1.0` ile çalışacak şekilde güncellendi. Cache dependency’si matching Windows/Linux native Redis bridge binary’sini içerir; bu yüzden writer `rust-java-rest` olmadan ve manuel `java.library.path` vermeden çalışabilir.
 
 ## Maven Package Erişimi
 
