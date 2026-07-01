@@ -6,6 +6,8 @@ Minimal PostgreSQL-to-Redis cache writer sample for the Rust-Java ecosystem.
 
 This process does not expose REST and does not use Dubbo. It reads PostgreSQL with ActiveJDBC + HikariCP, builds real-world nested JSON read models, and writes them to Redis through `java-rust-cache`, where Redis I/O is handled by Rust via JNI.
 
+This sample is wired to `com.reactor:java-rust-cache:0.1.0-rc3`. The cache dependency includes the matching Windows/Linux native Redis bridge, so this writer can run without `rust-java-rest` and without a manual `java.library.path`.
+
 ## Real Scenario
 
 Use this sample when a service owns PostgreSQL data but your REST pods should not query the database on every read.
@@ -55,8 +57,7 @@ Run one cache refresh:
 mvn -q clean package
 mvn -q dependency:build-classpath "-Dmdep.outputFile=target/cp.txt"
 $cp = Get-Content target\cp.txt
-java "-Djava.library.path=..\rust-spring\target\release" `
-  "-Dsample.writer.run-once=true" `
+java "-Dsample.writer.run-once=true" `
   "-Dsample.writer.initial-delay-ms=0" `
   "-Dreactor.cache.redis.port=16379" `
   -cp "target\classes;$cp" `
@@ -76,6 +77,7 @@ cache refresh published version=<version> keys=<count>
 | `sample.writer.interval-ms` | `60000` | How often the writer refreshes Redis. Increase for low-change data. |
 | `sample.writer.lock-ttl-ms` | `300000` | Prevents multiple replicas from publishing at the same time. Must be longer than a normal refresh. |
 | `sample.writer.cache-ttl-ms` | `600000` | Redis data lifetime. Keep it longer than refresh interval. |
+| `sample.writer.snapshot-batch-size` | `256` | Redis write batch size for versioned snapshot keys. Lower for memory-first pods; raise carefully if Redis write latency is low and refresh is too slow. |
 | `sample.writer.page-size` | `500` | DB read batch size. Increase carefully if rows are small and DB is strong. |
 | `sample.db.maximum-pool-size` | `2` | Writer is scheduled, not high-concurrency. Keep this low. |
 | `reactor.cache.redis.write-connections` | `2` | Native Redis write connections. Increase only if refresh takes too long. |

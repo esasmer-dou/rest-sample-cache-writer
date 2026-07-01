@@ -6,6 +6,8 @@ Rust-Java ekosistemi için minimum yüzeyli PostgreSQL-to-Redis cache writer ör
 
 Bu process REST endpoint açmaz ve Dubbo kullanmaz. PostgreSQL verisini ActiveJDBC + HikariCP ile okur, gerçek hayata yakın nested JSON read model üretir ve Redis’e `java-rust-cache` üzerinden yazar. Redis I/O tarafı Rust tarafından JNI ile yapılır.
 
+Bu örnek `com.reactor:java-rust-cache:0.1.0-rc3` ile çalışacak şekilde güncellendi. Cache dependency’si matching Windows/Linux native Redis bridge binary’sini içerir; bu yüzden writer `rust-java-rest` olmadan ve manuel `java.library.path` vermeden çalışabilir.
+
 ## Gerçek Senaryo
 
 PostgreSQL verisini bir servis sahipleniyor ama REST pod’larının her okuma isteğinde DB’ye gitmesini istemiyorsan bu örnek doğru modeldir.
@@ -53,8 +55,7 @@ Cache’i bir kez doldur:
 mvn -q clean package
 mvn -q dependency:build-classpath "-Dmdep.outputFile=target/cp.txt"
 $cp = Get-Content target\cp.txt
-java "-Djava.library.path=..\rust-spring\target\release" `
-  "-Dsample.writer.run-once=true" `
+java "-Dsample.writer.run-once=true" `
   "-Dsample.writer.initial-delay-ms=0" `
   "-Dreactor.cache.redis.port=16379" `
   -cp "target\classes;$cp" `
@@ -74,6 +75,7 @@ cache refresh published version=<version> keys=<count>
 | `sample.writer.interval-ms` | `60000` | Verinin ne sıklıkla Redis’e basılacağını belirler. Az değişen veri için artır. |
 | `sample.writer.lock-ttl-ms` | `300000` | Multiple replica’da aynı işi tek pod’un yapmasını sağlar. Normal refresh süresinden uzun olmalı. |
 | `sample.writer.cache-ttl-ms` | `600000` | Redis verisinin yaşam süresi. Refresh interval’dan uzun tut. |
+| `sample.writer.snapshot-batch-size` | `256` | Versioned snapshot key’leri için Redis write batch boyutu. Memory-first pod’da düşür; Redis write latency düşük ama refresh yavaşsa ölçerek artır. |
 | `sample.writer.page-size` | `500` | DB’den kaç kayıtlık batch okunacağını belirler. Satırlar küçükse ve DB güçlü ise dikkatli artır. |
 | `sample.db.maximum-pool-size` | `2` | Bu process request serve etmiyor, scheduled writer. Düşük tutmak doğru. |
 | `reactor.cache.redis.write-connections` | `2` | Rust native Redis write connection sayısı. Refresh yavaşsa ölçerek artır. |

@@ -1,7 +1,7 @@
 package com.reactor.sample.cache.writer.cache;
 
 import com.reactor.rust.cache.core.RustCache;
-import com.reactor.rust.cache.versioned.VersionedJsonCache;
+import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class CustomerCacheMaterializer {
 
     private final PostgresCustomerRepository repository;
-    private final VersionedJsonCache customerCache;
+    private final VersionedJsonCacheWriter customerCacheWriter;
     private final String lockName;
     private final long lockTtlMillis;
     private final long cacheTtlMillis;
@@ -27,7 +27,9 @@ public final class CustomerCacheMaterializer {
 
     public CustomerCacheMaterializer(PostgresCustomerRepository repository, RustCache cache, WriterProperties properties) {
         this.repository = repository;
-        this.customerCache = cache.versionedJson(properties.get("sample.writer.namespace"));
+        this.customerCacheWriter = cache.versionedJsonWriter(
+                properties.get("sample.writer.namespace"),
+                properties.getInt("sample.writer.snapshot-batch-size"));
         this.lockName = properties.get("sample.writer.lock-name");
         this.lockTtlMillis = properties.getLong("sample.writer.lock-ttl-ms");
         this.cacheTtlMillis = properties.getLong("sample.writer.cache-ttl-ms");
@@ -38,7 +40,7 @@ public final class CustomerCacheMaterializer {
     }
 
     public SnapshotResult refresh() {
-        return customerCache.writer().refreshSnapshotWithLock(lockName, lockTtlMillis, cacheTtlMillis, snapshot -> {
+        return customerCacheWriter.refreshSnapshotWithLock(lockName, lockTtlMillis, cacheTtlMillis, snapshot -> {
             AtomicInteger rowCount = new AtomicInteger();
             repository.forEachCustomerPage(pageSize, page -> {
                 for (SampleCustomer customer : page) {
