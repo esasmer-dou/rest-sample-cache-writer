@@ -8,6 +8,22 @@ Bu process REST endpoint açmaz ve Dubbo kullanmaz. PostgreSQL verisini ActiveJD
 
 Bu örnek `com.reactor:java-rust-cache:0.1.0-rc3` ile çalışacak şekilde güncellendi. Cache dependency’si matching Windows/Linux native Redis bridge binary’sini içerir; bu yüzden writer `rust-java-rest` olmadan ve manuel `java.library.path` vermeden çalışabilir.
 
+## Maven Package Erişimi
+
+Bu örnek `java-rust-cache` bağımlılığını GitHub Packages üzerinden çeker. Maven `settings.xml` dosyana `read:packages` yetkisi olan bir GitHub token eklemelisin:
+
+```xml
+<servers>
+  <server>
+    <id>github</id>
+    <username>YOUR_GITHUB_USERNAME</username>
+    <password>${env.GITHUB_PACKAGES_TOKEN}</password>
+  </server>
+</servers>
+```
+
+Maven çalıştırmadan önce `GITHUB_PACKAGES_TOKEN` environment variable olarak verilmelidir.
+
 ## Gerçek Senaryo
 
 PostgreSQL verisini bir servis sahipleniyor ama REST pod’larının her okuma isteğinde DB’ye gitmesini istemiyorsan bu örnek doğru modeldir.
