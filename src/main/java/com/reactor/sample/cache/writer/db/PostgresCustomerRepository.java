@@ -3,17 +3,13 @@ package com.reactor.sample.cache.writer.db;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import org.javalite.activejdbc.Base;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 public final class PostgresCustomerRepository implements AutoCloseable {
@@ -21,8 +17,9 @@ public final class PostgresCustomerRepository implements AutoCloseable {
     private static final String SELECT_CUSTOMERS_PAGE = """
             select id, customer_no, full_name, segment, email, status, created_at, updated_at
             from sample_customers
+            where id > ?
             order by id
-            limit ? offset ?
+            limit ?
             """;
     private static final String SELECT_SEGMENTS = """
             select distinct segment
@@ -92,9 +89,9 @@ public final class PostgresCustomerRepository implements AutoCloseable {
     public void forEachCustomerPage(int pageSize, Consumer<List<SampleCustomer>> pageConsumer) {
         ensureInitialized();
         int boundedPageSize = Math.max(1, Math.min(pageSize, 5_000));
-        int offset = 0;
+        long lastSeenId = 0;
         while (true) {
-            List<SampleCustomer> page = findCustomerPage(boundedPageSize, offset);
+            List<SampleCustomer> page = findCustomerPage(boundedPageSize, lastSeenId);
             if (page.isEmpty()) {
                 return;
             }
@@ -102,25 +99,25 @@ public final class PostgresCustomerRepository implements AutoCloseable {
             if (page.size() < boundedPageSize) {
                 return;
             }
-            offset += boundedPageSize;
+            lastSeenId = page.get(page.size() - 1).id();
         }
     }
 
     public List<String> findSegments() {
         ensureInitialized();
-        Base.open(dataSource);
-        try {
-            List<Map> rows = Base.findAll(SELECT_SEGMENTS);
-            List<String> segments = new ArrayList<>(rows.size());
-            for (Map row : rows) {
-                String segment = string(row.get("segment"));
-                if (!segment.isBlank()) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(SELECT_SEGMENTS);
+             ResultSet resultSet = statement.executeQuery()) {
+            List<String> segments = new ArrayList<>();
+            while (resultSet.next()) {
+                String segment = resultSet.getString("segment");
+                if (segment != null && !segment.isBlank()) {
                     segments.add(segment);
                 }
             }
             return segments;
-        } finally {
-            Base.close();
+        } catch (Exception e) {
+            throw new IllegalStateException("Find customer segments failed", e);
         }
     }
 
@@ -145,19 +142,19 @@ public final class PostgresCustomerRepository implements AutoCloseable {
 
     public List<String> findStatuses() {
         ensureInitialized();
-        Base.open(dataSource);
-        try {
-            List<Map> rows = Base.findAll(SELECT_STATUSES);
-            List<String> statuses = new ArrayList<>(rows.size());
-            for (Map row : rows) {
-                String status = string(row.get("status"));
-                if (!status.isBlank()) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(SELECT_STATUSES);
+             ResultSet resultSet = statement.executeQuery()) {
+            List<String> statuses = new ArrayList<>();
+            while (resultSet.next()) {
+                String status = resultSet.getString("status");
+                if (status != null && !status.isBlank()) {
                     statuses.add(status);
                 }
             }
             return statuses;
-        } finally {
-            Base.close();
+        } catch (Exception e) {
+            throw new IllegalStateException("Find customer statuses failed", e);
         }
     }
 
@@ -199,17 +196,20 @@ public final class PostgresCustomerRepository implements AutoCloseable {
         dataSource.close();
     }
 
-    private List<SampleCustomer> findCustomerPage(int limit, int offset) {
-        Base.open(dataSource);
-        try {
-            List<Map> rows = Base.findAll(SELECT_CUSTOMERS_PAGE, limit, offset);
-            List<SampleCustomer> customers = new ArrayList<>(rows.size());
-            for (Map row : rows) {
-                customers.add(toCustomer(row));
+    private List<SampleCustomer> findCustomerPage(int limit, long lastSeenId) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(SELECT_CUSTOMERS_PAGE)) {
+            statement.setLong(1, lastSeenId);
+            statement.setInt(2, limit);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<SampleCustomer> customers = new ArrayList<>(limit);
+                while (resultSet.next()) {
+                    customers.add(toCustomer(resultSet));
+                }
+                return customers;
             }
-            return customers;
-        } finally {
-            Base.close();
+        } catch (Exception e) {
+            throw new IllegalStateException("Find customer page failed", e);
         }
     }
 
@@ -260,19 +260,6 @@ public final class PostgresCustomerRepository implements AutoCloseable {
         }
     }
 
-    private static SampleCustomer toCustomer(Map row) {
-        return new SampleCustomer(
-                number(row.get("id")).longValue(),
-                string(row.get("customer_no")),
-                string(row.get("full_name")),
-                string(row.get("segment")),
-                string(row.get("email")),
-                string(row.get("status")),
-                instant(row.get("created_at")),
-                instant(row.get("updated_at"))
-        );
-    }
-
     private static SampleCustomer toCustomer(ResultSet row) throws Exception {
         return new SampleCustomer(
                 row.getLong("id"),
@@ -284,27 +271,6 @@ public final class PostgresCustomerRepository implements AutoCloseable {
                 row.getTimestamp("created_at").toInstant(),
                 row.getTimestamp("updated_at").toInstant()
         );
-    }
-
-    private static Number number(Object value) {
-        if (value instanceof Number number) {
-            return number;
-        }
-        return Long.parseLong(String.valueOf(value));
-    }
-
-    private static String string(Object value) {
-        return value == null ? "" : String.valueOf(value);
-    }
-
-    private static Instant instant(Object value) {
-        if (value instanceof Timestamp timestamp) {
-            return timestamp.toInstant();
-        }
-        if (value instanceof Instant instant) {
-            return instant;
-        }
-        return Instant.parse(String.valueOf(value));
     }
 
     public record CustomerCounts(int total, int active, int passive) {

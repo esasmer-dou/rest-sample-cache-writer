@@ -6,7 +6,7 @@ Rust-Java ekosistemi için minimum yüzeyli PostgreSQL-to-Redis cache writer ör
 
 Bu process REST endpoint açmaz ve Dubbo kullanmaz. PostgreSQL verisini ActiveJDBC + HikariCP ile okur, gerçek hayata yakın nested JSON read model üretir ve Redis’e `java-rust-cache` üzerinden yazar. Redis I/O tarafı Rust tarafından JNI ile yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.2.0` ile çalışacak şekilde güncellendi. Cache dependency’si matching Windows/Linux native Redis bridge binary’sini içerir; bu yüzden writer `rust-java-rest` olmadan ve manuel `java.library.path` vermeden çalışabilir.
+Bu örnek `com.reactor:java-rust-cache:0.2.1` ile çalışacak şekilde güncellendi. Cache dependency’si matching Windows/Linux native Redis bridge binary’sini içerir; bu yüzden writer `rust-java-rest` olmadan ve manuel `java.library.path` vermeden çalışabilir.
 
 ## Maven Package Erişimi
 
@@ -154,10 +154,12 @@ Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-sa
 | `reactor.cache.redis.topology` | `standalone` | Production HA/sharding için `sentinel` veya `cluster` seç. |
 | `reactor.cache.redis.nodes` | empty | Sentinel node listesi veya Cluster startup node listesi. |
 | `reactor.cache.redis.sentinel.master-name` | empty | Sadece Sentinel için zorunludur. |
+| `reactor.cache.redis.sentinel.master-check-ms` | `1000` | Sentinel modunda failover sonrası master değişimini ne sıklıkla kontrol edeceğini belirler. Recovery süresi ölçümle yetmiyorsa düşür. |
 
 ## Production Notları
 
 - Production’da schema migration bu process içinde yapılmamalı.
+- Sample artık PostgreSQL’i `offset` ile değil keyset pagination ile okur: `id > lastSeenId`. Büyük tablolarda bu pattern’i koru; offset page sayısı büyüdükçe sorgu yavaşlar.
 - Bu writer içine REST veya Dubbo ekleme; bu process’in işi DB’den okuyup Redis’e yazmak.
 - Read-heavy ekranlar için precomputed JSON kullan.
 - `sample.db.maximum-pool-size` değerini düşük tut. Bu bir batch writer, request-serving servis değil.

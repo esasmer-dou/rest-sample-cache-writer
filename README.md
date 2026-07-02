@@ -6,7 +6,7 @@ Minimal PostgreSQL-to-Redis cache writer sample for the Rust-Java ecosystem.
 
 This process does not expose REST and does not use Dubbo. It reads PostgreSQL with ActiveJDBC + HikariCP, builds real-world nested JSON read models, and writes them to Redis through `java-rust-cache`, where Redis I/O is handled by Rust via JNI.
 
-This sample is wired to `com.reactor:java-rust-cache:0.2.0`. The cache dependency includes the matching Windows/Linux native Redis bridge, so this writer can run without `rust-java-rest` and without a manual `java.library.path`.
+This sample is wired to `com.reactor:java-rust-cache:0.2.1`. The cache dependency includes the matching Windows/Linux native Redis bridge, so this writer can run without `rust-java-rest` and without a manual `java.library.path`.
 
 ## Maven Package Access
 
@@ -156,10 +156,12 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 | `reactor.cache.redis.topology` | `standalone` | Use `sentinel` or `cluster` for production HA/sharding. |
 | `reactor.cache.redis.nodes` | empty | Sentinel node list or Cluster startup node list. |
 | `reactor.cache.redis.sentinel.master-name` | empty | Required only for Sentinel. |
+| `reactor.cache.redis.sentinel.master-check-ms` | `1000` | How often Sentinel mode checks whether the master changed after failover. Lower only when recovery-time evidence needs it. |
 
 ## Production Notes
 
 - Keep schema migration outside this process in production.
+- The sample now reads PostgreSQL with keyset pagination (`id > lastSeenId`) instead of `offset`. Keep that pattern for large tables; offset pages get slower as the table grows.
 - Do not put REST or Dubbo into this writer unless there is a hard product reason.
 - Prefer precomputed JSON for read-heavy screens.
 - Keep `sample.db.maximum-pool-size` low. This is a batch writer, not a request-serving app.
