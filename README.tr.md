@@ -6,7 +6,7 @@ Rust-Java ekosistemi için minimum yüzeyli PostgreSQL-to-Redis cache writer ör
 
 Bu process REST endpoint açmaz ve Dubbo kullanmaz. PostgreSQL verisini ActiveJDBC + HikariCP ile okur, gerçek hayata yakın nested JSON read model üretir ve Redis’e `java-rust-cache` üzerinden yazar. Redis I/O tarafı Rust tarafından JNI ile yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.1.0` ile çalışacak şekilde güncellendi. Cache dependency’si matching Windows/Linux native Redis bridge binary’sini içerir; bu yüzden writer `rust-java-rest` olmadan ve manuel `java.library.path` vermeden çalışabilir.
+Bu örnek `com.reactor:java-rust-cache:0.2.0` ile çalışacak şekilde güncellendi. Cache dependency’si matching Windows/Linux native Redis bridge binary’sini içerir; bu yüzden writer `rust-java-rest` olmadan ve manuel `java.library.path` vermeden çalışabilir.
 
 ## Maven Package Erişimi
 
@@ -32,6 +32,16 @@ mvn -q dependency:resolve
 ```
 
 Maven `401 Unauthorized` dönerse önce token'ın `read:packages` yetkisini, environment variable'ın shell tarafından görüldüğünü ve server id eşleşmesini kontrol et.
+
+## Container Runtime Notu
+
+Minimal container image kullanıyorsan native extract dizini yazılabilir olmalı:
+
+```bash
+-Dreactor.cache.native.extract-dir=/tmp/java-rust-cache/native
+```
+
+Paket içindeki Linux native binary manylinux2014/glibc 2.17 tabanında build edilir. CentOS 8, UBI 8/9, Ubuntu/Jammy ve Semeru/OpenJ9 gibi yaygın glibc tabanlı image’larda çalışması hedeflenir. Custom native build kullanırsan native library’yi platformunun desteklediği en eski Linux base üzerinde build et.
 
 ## Gerçek Senaryo
 
@@ -93,6 +103,42 @@ Beklenen çıktı:
 cache refresh published version=<version> keys=<count>
 ```
 
+## Production Redis Topolojisi
+
+Bu writer production’da tek standalone Redis’e bağımlı olmamalıdır. Redis erişilemezse reader son geçerli version’ı TTL dolana kadar servis etmeye devam eder; fakat yeni snapshot publish edilemez.
+
+Redis tek writable primary ile çalışıyor ve failover Sentinel tarafından yönetiliyorsa Sentinel kullan:
+
+```yaml
+env:
+  - name: REACTOR_CACHE_REDIS_TOPOLOGY
+    value: "sentinel"
+  - name: REACTOR_CACHE_REDIS_NODES
+    value: "redis-sentinel-0:26379,redis-sentinel-1:26379,redis-sentinel-2:26379"
+  - name: REACTOR_CACHE_REDIS_SENTINEL_MASTER_NAME
+    value: "mymaster"
+  - name: REACTOR_CACHE_REDIS_WRITE_CONNECTIONS
+    value: "2"
+  - name: REACTOR_CACHE_REDIS_MAX_WRITE_INFLIGHT
+    value: "4"
+```
+
+Snapshot key’leri Redis node’larına dağıtılacaksa Cluster kullan:
+
+```yaml
+env:
+  - name: REACTOR_CACHE_REDIS_TOPOLOGY
+    value: "cluster"
+  - name: REACTOR_CACHE_REDIS_NODES
+    value: "redis-cluster-0:6379,redis-cluster-1:6379,redis-cluster-2:6379"
+  - name: REACTOR_CACHE_REDIS_CLUSTER_MAX_REDIRECTS
+    value: "5"
+  - name: REACTOR_CACHE_REDIS_TOPOLOGY_REFRESH_MS
+    value: "30000"
+```
+
+Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-safe çalışır: key’ler hedef node’a göre gruplanır ve redirect durumları yönetilir. Bir projection’ın aynı slot locality’ye ihtiyacı varsa key tasarımında hash tag kullan.
+
 ## Önemli Property’ler
 
 | Property | Default | Ne zaman değiştirirsin? |
@@ -105,6 +151,9 @@ cache refresh published version=<version> keys=<count>
 | `sample.db.maximum-pool-size` | `2` | Bu process request serve etmiyor, scheduled writer. Düşük tutmak doğru. |
 | `reactor.cache.redis.write-connections` | `2` | Rust native Redis write connection sayısı. Refresh yavaşsa ölçerek artır. |
 | `reactor.cache.redis.max-write-inflight` | `4` | Redis write backpressure limiti. Memory’yi korumak için bounded kalmalı. |
+| `reactor.cache.redis.topology` | `standalone` | Production HA/sharding için `sentinel` veya `cluster` seç. |
+| `reactor.cache.redis.nodes` | empty | Sentinel node listesi veya Cluster startup node listesi. |
+| `reactor.cache.redis.sentinel.master-name` | empty | Sadece Sentinel için zorunludur. |
 
 ## Production Notları
 

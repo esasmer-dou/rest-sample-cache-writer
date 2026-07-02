@@ -6,7 +6,7 @@ Minimal PostgreSQL-to-Redis cache writer sample for the Rust-Java ecosystem.
 
 This process does not expose REST and does not use Dubbo. It reads PostgreSQL with ActiveJDBC + HikariCP, builds real-world nested JSON read models, and writes them to Redis through `java-rust-cache`, where Redis I/O is handled by Rust via JNI.
 
-This sample is wired to `com.reactor:java-rust-cache:0.1.0`. The cache dependency includes the matching Windows/Linux native Redis bridge, so this writer can run without `rust-java-rest` and without a manual `java.library.path`.
+This sample is wired to `com.reactor:java-rust-cache:0.2.0`. The cache dependency includes the matching Windows/Linux native Redis bridge, so this writer can run without `rust-java-rest` and without a manual `java.library.path`.
 
 ## Maven Package Access
 
@@ -32,6 +32,16 @@ mvn -q dependency:resolve
 ```
 
 If Maven returns `401 Unauthorized`, check the token scope, environment variable, and server id matching first.
+
+## Container Runtime Note
+
+For minimal containers, set a writable native extract directory:
+
+```bash
+-Dreactor.cache.native.extract-dir=/tmp/java-rust-cache/native
+```
+
+The packaged Linux native binary is built on a manylinux2014/glibc 2.17 baseline. It is intended to run on common glibc-based images including CentOS 8, UBI 8/9, Ubuntu/Jammy, and Semeru/OpenJ9. If you use a custom native build, build it on the oldest Linux base your platform supports.
 
 ## Real Scenario
 
@@ -95,6 +105,42 @@ Expected output:
 cache refresh published version=<version> keys=<count>
 ```
 
+## Production Redis Topology
+
+This writer must not depend on a single standalone Redis in production. If Redis is unavailable, the reader keeps serving the last valid version until TTL expires, but new snapshots cannot be published.
+
+Use Sentinel when Redis has one writable primary and Sentinel owns failover:
+
+```yaml
+env:
+  - name: REACTOR_CACHE_REDIS_TOPOLOGY
+    value: "sentinel"
+  - name: REACTOR_CACHE_REDIS_NODES
+    value: "redis-sentinel-0:26379,redis-sentinel-1:26379,redis-sentinel-2:26379"
+  - name: REACTOR_CACHE_REDIS_SENTINEL_MASTER_NAME
+    value: "mymaster"
+  - name: REACTOR_CACHE_REDIS_WRITE_CONNECTIONS
+    value: "2"
+  - name: REACTOR_CACHE_REDIS_MAX_WRITE_INFLIGHT
+    value: "4"
+```
+
+Use Cluster when snapshot keys must be distributed across Redis nodes:
+
+```yaml
+env:
+  - name: REACTOR_CACHE_REDIS_TOPOLOGY
+    value: "cluster"
+  - name: REACTOR_CACHE_REDIS_NODES
+    value: "redis-cluster-0:6379,redis-cluster-1:6379,redis-cluster-2:6379"
+  - name: REACTOR_CACHE_REDIS_CLUSTER_MAX_REDIRECTS
+    value: "5"
+  - name: REACTOR_CACHE_REDIS_TOPOLOGY_REFRESH_MS
+    value: "30000"
+```
+
+For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: keys are grouped by destination node and redirects are handled. If a business projection needs same-slot locality, use hash tags in the key design.
+
 ## Important Properties
 
 | Property | Default | Use when |
@@ -107,6 +153,9 @@ cache refresh published version=<version> keys=<count>
 | `sample.db.maximum-pool-size` | `2` | Writer is scheduled, not high-concurrency. Keep this low. |
 | `reactor.cache.redis.write-connections` | `2` | Native Redis write connections. Increase only if refresh takes too long. |
 | `reactor.cache.redis.max-write-inflight` | `4` | Backpressure for Redis writes. Keep bounded to protect memory. |
+| `reactor.cache.redis.topology` | `standalone` | Use `sentinel` or `cluster` for production HA/sharding. |
+| `reactor.cache.redis.nodes` | empty | Sentinel node list or Cluster startup node list. |
+| `reactor.cache.redis.sentinel.master-name` | empty | Required only for Sentinel. |
 
 ## Production Notes
 
