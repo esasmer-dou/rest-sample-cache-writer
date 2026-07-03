@@ -4,9 +4,57 @@
 
 Rust-Java ekosistemi için minimum yüzeyli PostgreSQL-to-Redis cache writer örneği.
 
-Bu process REST endpoint açmaz ve Dubbo kullanmaz. PostgreSQL verisini ActiveJDBC + HikariCP ile okur, gerçek hayata yakın nested JSON read model üretir ve Redis’e `java-rust-cache` üzerinden yazar. Redis I/O tarafı Rust tarafından JNI ile yapılır.
+Bu süreç REST endpoint açmaz ve Dubbo kullanmaz. PostgreSQL verisini ActiveJDBC + HikariCP ile okur.
+Gerçek hayata yakın nested JSON read model üretir ve Redis'e `java-rust-cache` üzerinden yazar.
+Redis I/O tarafı Rust tarafından JNI ile yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.2.1` ile çalışacak şekilde güncellendi. Cache dependency’si matching Windows/Linux native Redis bridge binary’sini içerir; bu yüzden writer `rust-java-rest` olmadan ve manuel `java.library.path` vermeden çalışabilir.
+Bu örnek `com.reactor:java-rust-cache:0.2.1` ile çalışır. `java-rust-cache` paketi uyumlu
+Windows/Linux native Redis bridge binary'lerini içerir. Bu yüzden writer `rust-java-rest` olmadan ve
+manuel `java.library.path` vermeden çalışabilir.
+
+## Kopyala-Yapıştır: Müşteri Cache Snapshot'ı Yaz
+
+Bu senaryoda PostgreSQL kaynak veridir. Redis read model deposudur. Writer uygulaması DB'den okur ve
+Redis'e hazır JSON snapshot yazar. REST endpoint açmaz.
+
+Bu komutları `rest-sample-cache-writer` dizininde çalıştırın:
+
+```powershell
+docker rm -f rs-cache-postgres-test rs-cache-redis-test 2>$null
+
+docker run -d --name rs-cache-postgres-test `
+  -e POSTGRES_DB=reactor_sample `
+  -e POSTGRES_USER=reactor `
+  -e POSTGRES_PASSWORD=reactor `
+  -p 15432:5432 postgres:15.7-alpine
+
+docker run -d --name rs-cache-redis-test `
+  -p 16379:6379 redis:8.2.1-alpine3.22
+
+$env:GITHUB_PACKAGES_TOKEN="READ_PACKAGES_YETKILI_TOKEN"
+mvn -q clean package
+mvn -q dependency:build-classpath "-Dmdep.outputFile=target/cp.txt"
+
+$cp = Get-Content target\cp.txt
+java "-Dsample.writer.run-once=true" `
+  "-Dsample.writer.initial-delay-ms=0" `
+  "-Dsample.db.jdbc-url=jdbc:postgresql://127.0.0.1:15432/reactor_sample" `
+  "-Dsample.db.username=reactor" `
+  "-Dsample.db.password=reactor" `
+  "-Dreactor.cache.redis.host=127.0.0.1" `
+  "-Dreactor.cache.redis.port=16379" `
+  -cp "target\classes;$cp" `
+  com.reactor.sample.cache.writer.app.RestSampleCacheWriterApplication
+```
+
+Başarılı çalışmada şu mesaja benzer bir çıktı görürsünüz:
+
+```text
+cache refresh published version=<version> keys=<count>
+```
+
+Bu işlemden sonra `rest-sample-cache-reader` aynı Redis üzerinden müşteri profilini, segment
+listelerini ve kampanya adaylarını REST JSON olarak okuyabilir.
 
 ## Maven Package Erişimi
 

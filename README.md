@@ -8,6 +8,50 @@ This process does not expose REST and does not use Dubbo. It reads PostgreSQL wi
 
 This sample is wired to `com.reactor:java-rust-cache:0.2.1`. The cache dependency includes the matching Windows/Linux native Redis bridge, so this writer can run without `rust-java-rest` and without a manual `java.library.path`.
 
+## Copy-Paste: Publish A Customer Cache Snapshot
+
+In this scenario PostgreSQL is the source of truth. Redis stores the read model. The writer reads
+from the database and publishes ready JSON snapshots to Redis. It does not expose REST endpoints.
+
+Run these commands from the `rest-sample-cache-writer` directory:
+
+```powershell
+docker rm -f rs-cache-postgres-test rs-cache-redis-test 2>$null
+
+docker run -d --name rs-cache-postgres-test `
+  -e POSTGRES_DB=reactor_sample `
+  -e POSTGRES_USER=reactor `
+  -e POSTGRES_PASSWORD=reactor `
+  -p 15432:5432 postgres:15.7-alpine
+
+docker run -d --name rs-cache-redis-test `
+  -p 16379:6379 redis:8.2.1-alpine3.22
+
+$env:GITHUB_PACKAGES_TOKEN="YOUR_TOKEN_WITH_READ_PACKAGES"
+mvn -q clean package
+mvn -q dependency:build-classpath "-Dmdep.outputFile=target/cp.txt"
+
+$cp = Get-Content target\cp.txt
+java "-Dsample.writer.run-once=true" `
+  "-Dsample.writer.initial-delay-ms=0" `
+  "-Dsample.db.jdbc-url=jdbc:postgresql://127.0.0.1:15432/reactor_sample" `
+  "-Dsample.db.username=reactor" `
+  "-Dsample.db.password=reactor" `
+  "-Dreactor.cache.redis.host=127.0.0.1" `
+  "-Dreactor.cache.redis.port=16379" `
+  -cp "target\classes;$cp" `
+  com.reactor.sample.cache.writer.app.RestSampleCacheWriterApplication
+```
+
+Expected output:
+
+```text
+cache refresh published version=<version> keys=<count>
+```
+
+After this, `rest-sample-cache-reader` can serve customer profiles, segment lists, and campaign
+candidates from the same Redis instance.
+
 ## Maven Package Access
 
 This sample pulls `java-rust-cache` from GitHub Packages. Maven must authenticate before it can download the package; this is GitHub Packages' normal access model.
