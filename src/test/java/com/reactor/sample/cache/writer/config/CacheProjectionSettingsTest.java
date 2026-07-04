@@ -1,5 +1,6 @@
 package com.reactor.sample.cache.writer.config;
 
+import com.reactor.rust.cache.projection.CacheWriterProjectionSettings;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -21,7 +22,7 @@ class CacheProjectionSettingsTest {
 
     @Test
     void defaultProjectionSettingsDoNotNeedSafetyAdjustment() {
-        CacheProjectionSettings campaign = projection("campaign");
+        CacheWriterProjectionSettings campaign = projection("campaign");
 
         assertEquals(30000L, campaign.intervalMillis());
         assertEquals(120000L, campaign.configuredCacheTtlMillis());
@@ -33,7 +34,7 @@ class CacheProjectionSettingsTest {
     void raisesEffectiveTtlWhenConfiguredTtlIsShorterThanInterval() {
         System.setProperty("sample.writer.campaign.cache-ttl-ms", "1000");
 
-        CacheProjectionSettings campaign = projection("campaign");
+        CacheWriterProjectionSettings campaign = projection("campaign");
 
         assertEquals(30000L, campaign.intervalMillis());
         assertEquals(1000L, campaign.configuredCacheTtlMillis());
@@ -46,7 +47,7 @@ class CacheProjectionSettingsTest {
     void ignoresInvalidRuntimeOverrideAndUsesFileDefault() {
         System.setProperty("sample.writer.campaign.interval-ms", "wrong");
 
-        CacheProjectionSettings campaign = projection("campaign");
+        CacheWriterProjectionSettings campaign = projection("campaign");
 
         assertEquals(30000L, campaign.intervalMillis());
         assertEquals(120000L, campaign.effectiveCacheTtlMillis());
@@ -58,15 +59,17 @@ class CacheProjectionSettingsTest {
     void resolvesProjectionListFromRuntimeOverride() {
         System.setProperty("sample.writer.projections", "detail,campaign,detail");
 
-        List<CacheProjectionSettings> settings = CacheProjectionSettings.resolveAll(WriterProperties.load());
+        List<CacheWriterProjectionSettings> settings =
+                CacheWriterProjectionSettings.resolveAll(WriterProperties.load(), "sample.writer");
 
         assertEquals(2, settings.size());
         assertEquals("detail", settings.get(0).name());
         assertEquals("campaign", settings.get(1).name());
     }
 
-    private static CacheProjectionSettings projection(String name) {
-        List<CacheProjectionSettings> settings = CacheProjectionSettings.resolveAll(WriterProperties.load());
+    private static CacheWriterProjectionSettings projection(String name) {
+        List<CacheWriterProjectionSettings> settings =
+                CacheWriterProjectionSettings.resolveAll(WriterProperties.load(), "sample.writer");
         return settings.stream()
                 .filter(setting -> setting.name().equals(name))
                 .findFirst()

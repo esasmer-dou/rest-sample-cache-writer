@@ -8,7 +8,7 @@ This process does one job. It reads PostgreSQL and writes Redis.
 
 It does not expose REST. It does not use Dubbo. Java builds the read model. Rust writes Redis through `java-rust-cache`.
 
-This sample uses `com.reactor:java-rust-cache:0.2.1`. The package already includes Windows and Linux native binaries.
+This sample uses `com.reactor:java-rust-cache:0.2.2`. The package already includes Windows and Linux native binaries.
 
 ## Contents
 
@@ -16,12 +16,13 @@ This sample uses `com.reactor:java-rust-cache:0.2.1`. The package already includ
 2. [Maven Package Access](#maven-package-access)
 3. [Real Scenario](#real-scenario)
 4. [What It Publishes](#what-it-publishes)
-5. [TTL Model](#ttl-model)
-6. [TTL Recipes By Scenario](#ttl-recipes-by-scenario)
-7. [Production Redis Topology](#production-redis-topology)
-8. [Important Properties](#important-properties)
-9. [Glossary](#glossary)
-10. [Production Notes](#production-notes)
+5. [Declarative Projection Config](#declarative-projection-config)
+6. [TTL Model](#ttl-model)
+7. [TTL Recipes By Scenario](#ttl-recipes-by-scenario)
+8. [Production Redis Topology](#production-redis-topology)
+9. [Important Properties](#important-properties)
+10. [Glossary](#glossary)
+11. [Production Notes](#production-notes)
 
 ## Copy-Paste: Publish A Customer Cache Snapshot
 
@@ -130,6 +131,36 @@ The writer creates these business projections:
 | Snapshot metadata | `crm.customer.meta` | `300000` | `getMeta()` | Operational health/debug |
 
 The payload is intentionally nested: `customer`, `contact`, `profile`, `loyalty`, `risk`, `addresses`, `lastOrders`, and `audit`.
+
+## Declarative Projection Config
+
+Projection config is resolved by `java-rust-cache`:
+
+```java
+List<CacheWriterProjectionSettings> projections =
+        CacheWriterProjectionSettings.resolveAll(properties, "sample.writer");
+```
+
+The library resolves:
+
+- active projection names from `sample.writer.projections`
+- namespace per projection
+- refresh interval per projection
+- Redis lock name per projection
+- configured TTL and safe effective TTL
+
+The application still owns the business logic:
+
+```java
+switch (projection.name()) {
+    case "detail" -> publishCustomerDetails();
+    case "campaign" -> publishCampaignCandidates();
+    default -> throw new IllegalArgumentException("Unknown projection: " + projection.name());
+}
+```
+
+BEST: let the library parse config and keep DB queries and JSON shape explicit. ANTI-PATTERN:
+reflection-based projection magic that guesses what to publish from class names.
 
 ## TTL Model
 

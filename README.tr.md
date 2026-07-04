@@ -8,7 +8,7 @@ Bu uygulamanın tek işi vardır. PostgreSQL'den okur ve Redis'e yazar.
 
 REST endpoint açmaz. Dubbo kullanmaz. Java read model üretir. Redis yazma işi `java-rust-cache` ile Rust tarafında yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.2.1` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
+Bu örnek `com.reactor:java-rust-cache:0.2.2` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
 
 ## İçindekiler
 
@@ -16,12 +16,13 @@ Bu örnek `com.reactor:java-rust-cache:0.2.1` ile çalışır. Paket Windows ve 
 2. [Maven Package Erişimi](#maven-package-erişimi)
 3. [Gerçek Senaryo](#gerçek-senaryo)
 4. [Ne Üretiyor?](#ne-üretiyor)
-5. [TTL Modeli](#ttl-modeli)
-6. [Senaryoya Göre TTL Reçeteleri](#senaryoya-göre-ttl-reçeteleri)
-7. [Production Redis Topolojisi](#production-redis-topolojisi)
-8. [Önemli Property'ler](#önemli-propertyler)
-9. [Sözlük](#sözlük)
-10. [Production Notları](#production-notları)
+5. [Deklaratif Projection Config](#deklaratif-projection-config)
+6. [TTL Modeli](#ttl-modeli)
+7. [Senaryoya Göre TTL Reçeteleri](#senaryoya-göre-ttl-reçeteleri)
+8. [Production Redis Topolojisi](#production-redis-topolojisi)
+9. [Önemli Property'ler](#önemli-propertyler)
+10. [Sözlük](#sözlük)
+11. [Production Notları](#production-notları)
 
 ## Kopyala-Yapıştır: Müşteri Cache Snapshot'ı Yaz
 
@@ -128,6 +129,36 @@ Birden fazla replica güvenlidir. İki replica farklı projection'ları aynı an
 | Snapshot metadata | `crm.customer.meta` | `300000` | `getMeta()` | Operasyonel kontrol/debug |
 
 Payload özellikle nested hazırlandı: `customer`, `contact`, `profile`, `loyalty`, `risk`, `addresses`, `lastOrders`, `audit`.
+
+## Deklaratif Projection Config
+
+Projection config artık `java-rust-cache` tarafından çözülür:
+
+```java
+List<CacheWriterProjectionSettings> projections =
+        CacheWriterProjectionSettings.resolveAll(properties, "sample.writer");
+```
+
+Library şunları çözer:
+
+- `sample.writer.projections` içindeki aktif projection adları
+- projection bazlı namespace
+- projection bazlı refresh interval
+- projection bazlı Redis lock adı
+- configured TTL ve güvenli effective TTL
+
+Business mantığı yine uygulamada kalır:
+
+```java
+switch (projection.name()) {
+    case "detail" -> publishCustomerDetails();
+    case "campaign" -> publishCampaignCandidates();
+    default -> throw new IllegalArgumentException("Unknown projection: " + projection.name());
+}
+```
+
+BEST: config parse işini library'ye bırakın; DB sorgusunu ve JSON şeklini explicit kodda tutun.
+ANTI-PATTERN: class adlarından ne publish edileceğini tahmin eden reflection tabanlı projection magic.
 
 ## TTL Modeli
 

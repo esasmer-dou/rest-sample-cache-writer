@@ -1,8 +1,8 @@
 package com.reactor.sample.cache.writer.scheduler;
 
+import com.reactor.rust.cache.projection.CacheWriterProjectionSettings;
 import com.reactor.sample.cache.writer.cache.CustomerCacheMaterializer;
 import com.reactor.sample.cache.writer.cache.CustomerCacheMaterializer.RefreshResult;
-import com.reactor.sample.cache.writer.config.CacheProjectionSettings;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 
 import java.util.List;
@@ -25,13 +25,13 @@ public final class CacheRefreshScheduler implements AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public CacheRefreshScheduler(CustomerCacheMaterializer materializer, WriterProperties properties) {
-        this(materializer, properties, CacheProjectionSettings.resolveAll(properties));
+        this(materializer, properties, CacheWriterProjectionSettings.resolveAll(properties, "sample.writer"));
     }
 
     public CacheRefreshScheduler(
             CustomerCacheMaterializer materializer,
             WriterProperties properties,
-            List<CacheProjectionSettings> projectionSettings) {
+            List<CacheWriterProjectionSettings> projectionSettings) {
         this.materializer = materializer;
         this.schedules = projectionSettings.stream()
                 .map(ProjectionSchedule::from)
@@ -133,7 +133,7 @@ public final class CacheRefreshScheduler implements AutoCloseable {
             long lockTtlMillis,
             List<String> warnings) {
 
-        static ProjectionSchedule from(CacheProjectionSettings settings) {
+        static ProjectionSchedule from(CacheWriterProjectionSettings settings) {
             return new ProjectionSchedule(
                     settings.name(),
                     settings.initialDelayMillis(),

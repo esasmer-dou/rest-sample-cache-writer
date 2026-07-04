@@ -1,9 +1,9 @@
 package com.reactor.sample.cache.writer.cache;
 
 import com.reactor.rust.cache.core.RustCache;
+import com.reactor.rust.cache.projection.CacheWriterProjectionSettings;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
-import com.reactor.sample.cache.writer.config.CacheProjectionSettings;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository.CustomerCounts;
@@ -28,14 +28,14 @@ public final class CustomerCacheMaterializer {
     private final int campaignCandidateLimit;
 
     public CustomerCacheMaterializer(PostgresCustomerRepository repository, RustCache cache, WriterProperties properties) {
-        this(repository, cache, properties, CacheProjectionSettings.resolveAll(properties));
+        this(repository, cache, properties, CacheWriterProjectionSettings.resolveAll(properties, "sample.writer"));
     }
 
     public CustomerCacheMaterializer(
             PostgresCustomerRepository repository,
             RustCache cache,
             WriterProperties properties,
-            List<CacheProjectionSettings> projectionSettings) {
+            List<CacheWriterProjectionSettings> projectionSettings) {
         this.repository = repository;
         this.cache = cache;
         int batchSize = properties.getInt("sample.writer.snapshot-batch-size");
@@ -70,10 +70,10 @@ public final class CustomerCacheMaterializer {
 
     private Map<String, Projection> createProjections(
             RustCache cache,
-            List<CacheProjectionSettings> projectionSettings,
+            List<CacheWriterProjectionSettings> projectionSettings,
             int batchSize) {
         Map<String, Projection> created = new LinkedHashMap<>();
-        for (CacheProjectionSettings settings : projectionSettings) {
+        for (CacheWriterProjectionSettings settings : projectionSettings) {
             if (!projectionWriters.containsKey(settings.name())) {
                 throw new IllegalArgumentException("Unsupported writer projection: " + settings.name()
                         + ". Supported projections: " + projectionWriters.keySet());
@@ -83,7 +83,7 @@ public final class CustomerCacheMaterializer {
         return Collections.unmodifiableMap(created);
     }
 
-    private static Projection projection(RustCache cache, CacheProjectionSettings settings, int batchSize) {
+    private static Projection projection(RustCache cache, CacheWriterProjectionSettings settings, int batchSize) {
         return new Projection(
                 settings.name(),
                 settings.namespace(),

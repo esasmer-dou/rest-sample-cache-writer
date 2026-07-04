@@ -1,11 +1,13 @@
 package com.reactor.sample.cache.writer.config;
 
+import com.reactor.rust.cache.projection.ProjectionPropertySource;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
 import java.util.Properties;
 
-public final class WriterProperties {
+public final class WriterProperties implements ProjectionPropertySource {
 
     private static final String RESOURCE = "rest-sample-cache-writer.properties";
 
@@ -48,6 +50,7 @@ public final class WriterProperties {
         return value.trim();
     }
 
+    @Override
     public String getOptional(String key) {
         String value = getRuntimeOverride(key);
         if (value == null) {
@@ -56,6 +59,7 @@ public final class WriterProperties {
         return value == null ? "" : value.trim();
     }
 
+    @Override
     public String getRuntimeOverride(String key) {
         String value = System.getProperty(key);
         if (value == null) {
@@ -64,6 +68,7 @@ public final class WriterProperties {
         return value == null ? null : value.trim();
     }
 
+    @Override
     public String getFileOptional(String key) {
         String value = properties.getProperty(key);
         return value == null ? "" : value.trim();

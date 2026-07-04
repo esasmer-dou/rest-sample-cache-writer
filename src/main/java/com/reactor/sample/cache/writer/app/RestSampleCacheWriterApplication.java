@@ -2,8 +2,8 @@ package com.reactor.sample.cache.writer.app;
 
 import com.reactor.rust.cache.core.RustCache;
 import com.reactor.rust.cache.core.RustCaches;
+import com.reactor.rust.cache.projection.CacheWriterProjectionSettings;
 import com.reactor.sample.cache.writer.cache.CustomerCacheMaterializer;
-import com.reactor.sample.cache.writer.config.CacheProjectionSettings;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
 import com.reactor.sample.cache.writer.scheduler.CacheRefreshScheduler;
@@ -16,7 +16,8 @@ public final class RestSampleCacheWriterApplication {
 
     public static void main(String[] args) {
         WriterProperties properties = WriterProperties.load();
-        List<CacheProjectionSettings> projectionSettings = CacheProjectionSettings.resolveAll(properties);
+        List<CacheWriterProjectionSettings> projectionSettings =
+                CacheWriterProjectionSettings.resolveAll(properties, "sample.writer");
 
         PostgresCustomerRepository repository = PostgresCustomerRepository.fromProperties(properties);
         RustCache cache = RustCaches.create(properties.asProperties());
