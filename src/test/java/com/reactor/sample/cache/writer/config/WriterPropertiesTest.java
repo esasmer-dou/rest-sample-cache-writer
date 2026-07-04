@@ -11,6 +11,7 @@ class WriterPropertiesTest {
         WriterProperties properties = WriterProperties.load();
 
         assertEquals("crm.customer", properties.get("sample.writer.namespace"));
+        assertEquals("detail,segment,status,campaign,meta", properties.get("sample.writer.projections"));
         assertEquals(2, properties.getInt("sample.writer.scheduler-threads"));
         assertEquals("crm.customer.detail", properties.get("sample.writer.detail.namespace"));
         assertEquals("crm.customer.segment", properties.get("sample.writer.segment.namespace"));

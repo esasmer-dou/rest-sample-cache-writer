@@ -136,6 +136,7 @@ The payload is intentionally nested: `customer`, `contact`, `profile`, `loyalty`
 The writer supports two TTL levels:
 
 ```properties
+sample.writer.projections=detail,segment,status,campaign,meta
 sample.writer.cache-ttl-ms=600000
 sample.writer.detail.cache-ttl-ms=1800000
 sample.writer.segment.cache-ttl-ms=300000
@@ -145,6 +146,14 @@ sample.writer.meta.cache-ttl-ms=300000
 ```
 
 Use the base `sample.writer.cache-ttl-ms` when all projections can live for the same period. Use projection TTLs when data freshness is different. For example, customer detail can live longer, but campaign candidates may need a shorter TTL.
+
+`sample.writer.projections` controls which projection jobs are created by the scheduler. If you only need customer detail and campaign candidates, use:
+
+```properties
+sample.writer.projections=detail,campaign
+```
+
+Then the writer publishes only `detail` and `campaign`. Adding a brand-new business projection still needs DB read and JSON writer code. This is intentional. Config selects the active projection set; business transformation logic stays explicit in code.
 
 Do not put different TTLs on random keys inside the same snapshot. That creates partial snapshots. This sample uses separate namespaces instead, so each projection stays internally consistent.
 
@@ -339,6 +348,7 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 | `sample.writer.lock-name` | `crm.customer.refresh` | Base lock name. Projection locks are derived from it unless explicitly set. | Change per cache domain. Keep all replicas aligned. |
 | `sample.writer.lock-ttl-ms` | `300000` | Base lock TTL. Projection lock TTL overrides it. | Set longer than that projection's normal refresh duration. |
 | `sample.writer.scheduler-threads` | `2` | Number of local projection scheduler threads. | Keep low for small pods. Raise only if one writer replica must run projections in parallel. |
+| `sample.writer.projections` | `detail,segment,status,campaign,meta` | Selects active projection jobs. | Narrow it when this writer should publish only selected read models. |
 | `sample.writer.cache-ttl-ms` | `600000` | Base Redis data lifetime. | Use when all projections can share one TTL. |
 | `sample.writer.cache-ttl-safety-margin-ms` | `30000` | Safety margin added above interval when a TTL is misconfigured too short. | Usually leave unchanged. Lower only with measured low-risk short-interval projections. |
 | `sample.writer.detail.interval-ms` | `300000` | Refresh interval for customer detail. | Increase for stable profile data. |

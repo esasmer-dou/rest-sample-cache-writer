@@ -134,6 +134,7 @@ Payload özellikle nested hazırlandı: `customer`, `contact`, `profile`, `loyal
 Writer artık iki seviyede TTL kullanabilir:
 
 ```properties
+sample.writer.projections=detail,segment,status,campaign,meta
 sample.writer.cache-ttl-ms=600000
 sample.writer.detail.cache-ttl-ms=1800000
 sample.writer.segment.cache-ttl-ms=300000
@@ -143,6 +144,14 @@ sample.writer.meta.cache-ttl-ms=300000
 ```
 
 Bütün projection’lar aynı süre yaşayacaksa sadece `sample.writer.cache-ttl-ms` yeterlidir. Veri tiplerinin tazelik ihtiyacı farklıysa projection TTL kullan. Örneğin müşteri detayı daha uzun yaşayabilir, kampanya adayları ise daha kısa TTL ile tutulmalıdır.
+
+`sample.writer.projections` hangi projection işlerinin scheduler tarafından kurulacağını belirler. Örneğin sadece müşteri detayı ve kampanya adayları gerekiyorsa şu şekilde sadeleştirebilirsin:
+
+```properties
+sample.writer.projections=detail,campaign
+```
+
+Bu durumda writer sadece `detail` ve `campaign` projection'larını publish eder. Yeni bir business projection eklemek istersen property'ye adını eklemek tek başına yetmez; o projection'ın DB okuma ve JSON üretme kodu da eklenmelidir. Bu bilinçli bir sınırdır. Config, çalışacak projection setini seçer; business dönüşüm mantığı kodda kalır.
 
 Aynı snapshot içindeki rastgele key’lere farklı TTL vermek doğru değildir. Bu, reader tarafında parçalı snapshot görülmesine neden olabilir. Bu örnek bunun yerine ayrı namespace kullanır. Böylece her projection kendi içinde tutarlı kalır.
 
@@ -337,6 +346,7 @@ Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-sa
 | `sample.writer.lock-name` | `crm.customer.refresh` | Base lock adıdır. Projection lock adları bundan türetilir. | Cache domain değişiyorsa değiştir. Tüm replica'larda aynı olmalı. |
 | `sample.writer.lock-ttl-ms` | `300000` | Base lock TTL değeridir. Projection lock TTL bunu override eder. | İlgili projection refresh süresinden uzun olmalı. |
 | `sample.writer.scheduler-threads` | `2` | Lokal projection scheduler thread sayısıdır. | Küçük pod için düşük tut. Tek replica içinde paralel projection gerekiyorsa ölçerek artır. |
+| `sample.writer.projections` | `detail,segment,status,campaign,meta` | Çalışacak projection listesini belirler. | Sadece gerekli read model'leri publish etmek istiyorsan daralt. |
 | `sample.writer.cache-ttl-ms` | `600000` | Base Redis veri yaşam süresidir. | Bütün projection'lar aynı TTL kullanacaksa yeterlidir. |
 | `sample.writer.cache-ttl-safety-margin-ms` | `30000` | Hatalı kısa TTL görüldüğünde interval üstüne eklenecek güvenlik marjıdır. | Normalde değiştirme. Çok kısa interval kullanan düşük riskli projection'larda ölçerek düşür. |
 | `sample.writer.detail.interval-ms` | `300000` | Müşteri detay refresh aralığıdır. | Profil verisi stabilse artır. |

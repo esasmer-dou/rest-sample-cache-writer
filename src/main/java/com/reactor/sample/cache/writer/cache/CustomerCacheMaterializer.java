@@ -11,17 +11,17 @@ import com.reactor.sample.cache.writer.db.SampleCustomer;
 import com.reactor.sample.cache.writer.json.CustomerJsonWriter;
 
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class CustomerCacheMaterializer {
 
     private final PostgresCustomerRepository repository;
     private final RustCache cache;
-    private final Projection detailProjection;
-    private final Projection segmentProjection;
-    private final Projection statusProjection;
-    private final Projection campaignProjection;
-    private final Projection metaProjection;
+    private final Map<String, Projection> projections;
+    private final Map<String, ProjectionWriter> projectionWriters;
     private final int pageSize;
     private final int segmentIndexLimit;
     private final int statusIndexLimit;
@@ -39,30 +39,48 @@ public final class CustomerCacheMaterializer {
         this.repository = repository;
         this.cache = cache;
         int batchSize = properties.getInt("sample.writer.snapshot-batch-size");
-        this.detailProjection = projection(cache, setting(projectionSettings, "detail"), batchSize);
-        this.segmentProjection = projection(cache, setting(projectionSettings, "segment"), batchSize);
-        this.statusProjection = projection(cache, setting(projectionSettings, "status"), batchSize);
-        this.campaignProjection = projection(cache, setting(projectionSettings, "campaign"), batchSize);
-        this.metaProjection = projection(cache, setting(projectionSettings, "meta"), batchSize);
         this.pageSize = properties.getInt("sample.writer.page-size");
         this.segmentIndexLimit = properties.getInt("sample.writer.segment-index-limit");
         this.statusIndexLimit = properties.getInt("sample.writer.status-index-limit");
         this.campaignCandidateLimit = properties.getInt("sample.writer.campaign-candidate-limit");
+        this.projectionWriters = Map.of(
+                "detail", this::writeDetail,
+                "segment", this::writeSegment,
+                "status", this::writeStatus,
+                "campaign", this::writeCampaign,
+                "meta", this::writeMeta);
+        this.projections = createProjections(cache, projectionSettings, batchSize);
     }
 
-    public static List<String> projectionNames() {
-        return CacheProjectionSettings.projectionNames();
+    public List<String> projectionNames() {
+        return List.copyOf(projections.keySet());
     }
 
     public RefreshResult refreshProjection(String projectionName, String lockName, long lockTtlMillis) {
         Projection projection = projectionByName(projectionName);
+        ProjectionWriter writer = projectionWriter(projectionName);
         RefreshResult[] result = new RefreshResult[1];
         boolean ran = cache.locks().runOnceChecked(lockName, lockTtlMillis, lock -> {
-            SnapshotResult snapshot = writeProjection(projection);
+            SnapshotResult snapshot = writer.write(projection);
             lock.ensureValid();
             result[0] = RefreshResult.publishedResult(projection.name(), snapshot.version(), snapshot.writtenKeys());
         });
         return ran ? result[0] : RefreshResult.skippedResult(projection.name());
+    }
+
+    private Map<String, Projection> createProjections(
+            RustCache cache,
+            List<CacheProjectionSettings> projectionSettings,
+            int batchSize) {
+        Map<String, Projection> created = new LinkedHashMap<>();
+        for (CacheProjectionSettings settings : projectionSettings) {
+            if (!projectionWriters.containsKey(settings.name())) {
+                throw new IllegalArgumentException("Unsupported writer projection: " + settings.name()
+                        + ". Supported projections: " + projectionWriters.keySet());
+            }
+            created.put(settings.name(), projection(cache, settings, batchSize));
+        }
+        return Collections.unmodifiableMap(created);
     }
 
     private static Projection projection(RustCache cache, CacheProjectionSettings settings, int batchSize) {
@@ -71,17 +89,6 @@ public final class CustomerCacheMaterializer {
                 settings.namespace(),
                 settings.effectiveCacheTtlMillis(),
                 cache.versionedJsonWriter(settings.namespace(), batchSize));
-    }
-
-    private SnapshotResult writeProjection(Projection projection) throws Exception {
-        return switch (projection.name()) {
-            case "detail" -> writeDetail(projection);
-            case "segment" -> writeSegment(projection);
-            case "status" -> writeStatus(projection);
-            case "campaign" -> writeCampaign(projection);
-            case "meta" -> writeMeta(projection);
-            default -> throw new IllegalArgumentException("Unsupported projection: " + projection.name());
-        };
     }
 
     private SnapshotResult writeDetail(Projection projection) throws Exception {
@@ -130,22 +137,21 @@ public final class CustomerCacheMaterializer {
     }
 
     private Projection projectionByName(String projectionName) {
-        return switch (projectionName) {
-            case "detail" -> detailProjection;
-            case "segment" -> segmentProjection;
-            case "status" -> statusProjection;
-            case "campaign" -> campaignProjection;
-            case "meta" -> metaProjection;
-            default -> throw new IllegalArgumentException("Unsupported projection: " + projectionName
-                    + ". Supported projections: " + projectionNames());
-        };
+        Projection projection = projections.get(projectionName);
+        if (projection == null) {
+            throw new IllegalArgumentException("Unsupported projection: " + projectionName
+                    + ". Configured projections: " + projections.keySet());
+        }
+        return projection;
     }
 
-    private static CacheProjectionSettings setting(List<CacheProjectionSettings> settings, String name) {
-        return settings.stream()
-                .filter(setting -> setting.name().equals(name))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Missing projection setting: " + name));
+    private ProjectionWriter projectionWriter(String projectionName) {
+        ProjectionWriter writer = projectionWriters.get(projectionName);
+        if (writer == null) {
+            throw new IllegalArgumentException("Unsupported writer projection: " + projectionName
+                    + ". Supported projections: " + projectionWriters.keySet());
+        }
+        return writer;
     }
 
     private record Projection(
@@ -153,6 +159,11 @@ public final class CustomerCacheMaterializer {
             String namespace,
             long ttlMillis,
             VersionedJsonCacheWriter writer) {}
+
+    @FunctionalInterface
+    private interface ProjectionWriter {
+        SnapshotResult write(Projection projection) throws Exception;
+    }
 
     public record RefreshResult(String projection, boolean published, boolean skippedLocked, String version, int writtenKeys) {
 

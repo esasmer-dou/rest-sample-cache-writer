@@ -1,7 +1,9 @@
 package com.reactor.sample.cache.writer.config;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public record CacheProjectionSettings(
         String name,
@@ -14,14 +16,12 @@ public record CacheProjectionSettings(
         long lockTtlMillis,
         List<String> warnings) {
 
-    private static final List<String> PROJECTIONS = List.of("detail", "segment", "status", "campaign", "meta");
-
     public CacheProjectionSettings {
         warnings = List.copyOf(warnings);
     }
 
-    public static List<String> projectionNames() {
-        return PROJECTIONS;
+    public static List<String> projectionNames(WriterProperties properties) {
+        return parseProjectionNames(properties.get("sample.writer.projections"));
     }
 
     public static List<CacheProjectionSettings> resolveAll(WriterProperties properties) {
@@ -32,9 +32,23 @@ public record CacheProjectionSettings(
                 "30000",
                 true,
                 globalWarnings);
-        return PROJECTIONS.stream()
+        return projectionNames(properties).stream()
                 .map(projection -> resolve(properties, projection, ttlSafetyMarginMillis, globalWarnings))
                 .toList();
+    }
+
+    private static List<String> parseProjectionNames(String value) {
+        Set<String> names = new LinkedHashSet<>();
+        for (String item : value.split(",")) {
+            String name = item.trim();
+            if (!name.isBlank()) {
+                names.add(name);
+            }
+        }
+        if (names.isEmpty()) {
+            throw new IllegalArgumentException("sample.writer.projections must contain at least one projection");
+        }
+        return List.copyOf(names);
     }
 
     private static CacheProjectionSettings resolve(

@@ -13,6 +13,7 @@ class CacheProjectionSettingsTest {
 
     @AfterEach
     void clearRuntimeOverrides() {
+        System.clearProperty("sample.writer.projections");
         System.clearProperty("sample.writer.campaign.cache-ttl-ms");
         System.clearProperty("sample.writer.campaign.interval-ms");
         System.clearProperty("sample.writer.cache-ttl-safety-margin-ms");
@@ -51,6 +52,17 @@ class CacheProjectionSettingsTest {
         assertEquals(120000L, campaign.effectiveCacheTtlMillis());
         assertFalse(campaign.warnings().isEmpty());
         assertTrue(campaign.warnings().get(0).contains("must-be-long"));
+    }
+
+    @Test
+    void resolvesProjectionListFromRuntimeOverride() {
+        System.setProperty("sample.writer.projections", "detail,campaign,detail");
+
+        List<CacheProjectionSettings> settings = CacheProjectionSettings.resolveAll(WriterProperties.load());
+
+        assertEquals(2, settings.size());
+        assertEquals("detail", settings.get(0).name());
+        assertEquals("campaign", settings.get(1).name());
     }
 
     private static CacheProjectionSettings projection(String name) {
