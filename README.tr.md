@@ -146,6 +146,22 @@ Bütün projection’lar aynı süre yaşayacaksa sadece `sample.writer.cache-tt
 
 Aynı snapshot içindeki rastgele key’lere farklı TTL vermek doğru değildir. Bu, reader tarafında parçalı snapshot görülmesine neden olabilir. Bu örnek bunun yerine ayrı namespace kullanır. Böylece her projection kendi içinde tutarlı kalır.
 
+**Üretim uyarısı:** Her projection için cache TTL değeri, aynı projection'ın refresh interval değerinden büyük olmalıdır. Hatalı config verilirse uygulama kapanmaz. Writer güvenli tarafta kalır ve effective TTL değerini `interval + sample.writer.cache-ttl-safety-margin-ms` olarak düzeltir. Varsayılan güvenlik marjı `30000` ms'dir. Bu bir kurtarma davranışıdır; doğru çözüm property değerini düzeltmektir.
+
+Hatalı config örneği:
+
+```properties
+sample.writer.campaign.interval-ms=30000
+sample.writer.campaign.cache-ttl-ms=10000
+sample.writer.cache-ttl-safety-margin-ms=30000
+```
+
+Bu durumda writer `campaign` TTL değerini runtime'da `60000` ms olarak kullanır ve startup ile her refresh denemesinde log basar:
+
+```text
+WARNING cache writer config projection=campaign property=sample.writer.campaign.cache-ttl-ms configuredCacheTtlMs=10000 intervalMs=30000 effectiveCacheTtlMs=60000 safetyMarginMs=30000 reason=cache-ttl-ms-must-be-greater-than-interval phase=startup
+```
+
 ## Senaryoya Göre TTL Reçeteleri
 
 Bu örnekleri başlangıç noktası olarak kullan. Her veri TTL değeri ilgili projection'ın refresh interval değerinden uzun olmalıdır. TTL, interval değerinden kısa olursa reader yeni publish tamamlanmadan önce süresi dolmuş projection görebilir.
@@ -322,6 +338,7 @@ Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-sa
 | `sample.writer.lock-ttl-ms` | `300000` | Base lock TTL değeridir. Projection lock TTL bunu override eder. | İlgili projection refresh süresinden uzun olmalı. |
 | `sample.writer.scheduler-threads` | `2` | Lokal projection scheduler thread sayısıdır. | Küçük pod için düşük tut. Tek replica içinde paralel projection gerekiyorsa ölçerek artır. |
 | `sample.writer.cache-ttl-ms` | `600000` | Base Redis veri yaşam süresidir. | Bütün projection'lar aynı TTL kullanacaksa yeterlidir. |
+| `sample.writer.cache-ttl-safety-margin-ms` | `30000` | Hatalı kısa TTL görüldüğünde interval üstüne eklenecek güvenlik marjıdır. | Normalde değiştirme. Çok kısa interval kullanan düşük riskli projection'larda ölçerek düşür. |
 | `sample.writer.detail.interval-ms` | `300000` | Müşteri detay refresh aralığıdır. | Profil verisi stabilse artır. |
 | `sample.writer.detail.lock-name` | `crm.customer.detail.refresh` | Detail refresh Redis lock adıdır. | Sadece tüm writer replica'larla birlikte değiştir. |
 | `sample.writer.detail.lock-ttl-ms` | `300000` | Detail lock yaşam süresidir. | Detail refresh süresinden uzun tut. |

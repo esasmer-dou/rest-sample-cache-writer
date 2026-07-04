@@ -3,9 +3,12 @@ package com.reactor.sample.cache.writer.app;
 import com.reactor.rust.cache.core.RustCache;
 import com.reactor.rust.cache.core.RustCaches;
 import com.reactor.sample.cache.writer.cache.CustomerCacheMaterializer;
+import com.reactor.sample.cache.writer.config.CacheProjectionSettings;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
 import com.reactor.sample.cache.writer.scheduler.CacheRefreshScheduler;
+
+import java.util.List;
 
 public final class RestSampleCacheWriterApplication {
 
@@ -13,11 +16,12 @@ public final class RestSampleCacheWriterApplication {
 
     public static void main(String[] args) {
         WriterProperties properties = WriterProperties.load();
+        List<CacheProjectionSettings> projectionSettings = CacheProjectionSettings.resolveAll(properties);
 
         PostgresCustomerRepository repository = PostgresCustomerRepository.fromProperties(properties);
         RustCache cache = RustCaches.create(properties.asProperties());
-        CustomerCacheMaterializer materializer = new CustomerCacheMaterializer(repository, cache, properties);
-        CacheRefreshScheduler scheduler = new CacheRefreshScheduler(materializer, properties);
+        CustomerCacheMaterializer materializer = new CustomerCacheMaterializer(repository, cache, properties, projectionSettings);
+        CacheRefreshScheduler scheduler = new CacheRefreshScheduler(materializer, properties, projectionSettings);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> shutdown(scheduler, repository, cache), "cache-writer-shutdown"));
         scheduler.start();

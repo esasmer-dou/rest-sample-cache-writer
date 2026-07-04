@@ -148,6 +148,22 @@ Use the base `sample.writer.cache-ttl-ms` when all projections can live for the 
 
 Do not put different TTLs on random keys inside the same snapshot. That creates partial snapshots. This sample uses separate namespaces instead, so each projection stays internally consistent.
 
+**Production warning:** For each projection, cache TTL must be greater than that projection's refresh interval. If this is misconfigured, the application does not stop. The writer stays safe and raises the effective TTL to `interval + sample.writer.cache-ttl-safety-margin-ms`. The default safety margin is `30000` ms. This is a recovery behavior; the correct fix is still to correct the property value.
+
+Bad config example:
+
+```properties
+sample.writer.campaign.interval-ms=30000
+sample.writer.campaign.cache-ttl-ms=10000
+sample.writer.cache-ttl-safety-margin-ms=30000
+```
+
+In this case, the writer uses `60000` ms as the runtime `campaign` TTL and logs the warning at startup and on every refresh attempt:
+
+```text
+WARNING cache writer config projection=campaign property=sample.writer.campaign.cache-ttl-ms configuredCacheTtlMs=10000 intervalMs=30000 effectiveCacheTtlMs=60000 safetyMarginMs=30000 reason=cache-ttl-ms-must-be-greater-than-interval phase=startup
+```
+
 ## TTL Recipes By Scenario
 
 Use these examples as starting points. Keep every data TTL longer than that projection's refresh interval. If TTL is shorter than the interval, readers can see expired projections before the next publish finishes.
@@ -324,6 +340,7 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 | `sample.writer.lock-ttl-ms` | `300000` | Base lock TTL. Projection lock TTL overrides it. | Set longer than that projection's normal refresh duration. |
 | `sample.writer.scheduler-threads` | `2` | Number of local projection scheduler threads. | Keep low for small pods. Raise only if one writer replica must run projections in parallel. |
 | `sample.writer.cache-ttl-ms` | `600000` | Base Redis data lifetime. | Use when all projections can share one TTL. |
+| `sample.writer.cache-ttl-safety-margin-ms` | `30000` | Safety margin added above interval when a TTL is misconfigured too short. | Usually leave unchanged. Lower only with measured low-risk short-interval projections. |
 | `sample.writer.detail.interval-ms` | `300000` | Refresh interval for customer detail. | Increase for stable profile data. |
 | `sample.writer.detail.lock-name` | `crm.customer.detail.refresh` | Redis lock for detail refresh. | Change only with all writer replicas. |
 | `sample.writer.detail.lock-ttl-ms` | `300000` | Detail lock lifetime. | Keep longer than detail refresh time. |

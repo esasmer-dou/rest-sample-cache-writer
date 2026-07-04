@@ -3,6 +3,7 @@ package com.reactor.sample.cache.writer.cache;
 import com.reactor.rust.cache.core.RustCache;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
+import com.reactor.sample.cache.writer.config.CacheProjectionSettings;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository.CustomerCounts;
@@ -13,8 +14,6 @@ import java.time.Instant;
 import java.util.List;
 
 public final class CustomerCacheMaterializer {
-
-    private static final List<String> PROJECTIONS = List.of("detail", "segment", "status", "campaign", "meta");
 
     private final PostgresCustomerRepository repository;
     private final RustCache cache;
@@ -29,14 +28,22 @@ public final class CustomerCacheMaterializer {
     private final int campaignCandidateLimit;
 
     public CustomerCacheMaterializer(PostgresCustomerRepository repository, RustCache cache, WriterProperties properties) {
+        this(repository, cache, properties, CacheProjectionSettings.resolveAll(properties));
+    }
+
+    public CustomerCacheMaterializer(
+            PostgresCustomerRepository repository,
+            RustCache cache,
+            WriterProperties properties,
+            List<CacheProjectionSettings> projectionSettings) {
         this.repository = repository;
         this.cache = cache;
         int batchSize = properties.getInt("sample.writer.snapshot-batch-size");
-        this.detailProjection = projection(cache, properties, "detail", batchSize);
-        this.segmentProjection = projection(cache, properties, "segment", batchSize);
-        this.statusProjection = projection(cache, properties, "status", batchSize);
-        this.campaignProjection = projection(cache, properties, "campaign", batchSize);
-        this.metaProjection = projection(cache, properties, "meta", batchSize);
+        this.detailProjection = projection(cache, setting(projectionSettings, "detail"), batchSize);
+        this.segmentProjection = projection(cache, setting(projectionSettings, "segment"), batchSize);
+        this.statusProjection = projection(cache, setting(projectionSettings, "status"), batchSize);
+        this.campaignProjection = projection(cache, setting(projectionSettings, "campaign"), batchSize);
+        this.metaProjection = projection(cache, setting(projectionSettings, "meta"), batchSize);
         this.pageSize = properties.getInt("sample.writer.page-size");
         this.segmentIndexLimit = properties.getInt("sample.writer.segment-index-limit");
         this.statusIndexLimit = properties.getInt("sample.writer.status-index-limit");
@@ -44,7 +51,7 @@ public final class CustomerCacheMaterializer {
     }
 
     public static List<String> projectionNames() {
-        return PROJECTIONS;
+        return CacheProjectionSettings.projectionNames();
     }
 
     public RefreshResult refreshProjection(String projectionName, String lockName, long lockTtlMillis) {
@@ -58,14 +65,12 @@ public final class CustomerCacheMaterializer {
         return ran ? result[0] : RefreshResult.skippedResult(projection.name());
     }
 
-    private static Projection projection(RustCache cache, WriterProperties properties, String name, int batchSize) {
-        String namespace = projectionNamespace(properties, name);
-        long ttlMillis = projectionTtlMillis(properties, name);
+    private static Projection projection(RustCache cache, CacheProjectionSettings settings, int batchSize) {
         return new Projection(
-                name,
-                namespace,
-                ttlMillis,
-                cache.versionedJsonWriter(namespace, batchSize));
+                settings.name(),
+                settings.namespace(),
+                settings.effectiveCacheTtlMillis(),
+                cache.versionedJsonWriter(settings.namespace(), batchSize));
     }
 
     private SnapshotResult writeProjection(Projection projection) throws Exception {
@@ -132,58 +137,15 @@ public final class CustomerCacheMaterializer {
             case "campaign" -> campaignProjection;
             case "meta" -> metaProjection;
             default -> throw new IllegalArgumentException("Unsupported projection: " + projectionName
-                    + ". Supported projections: " + PROJECTIONS);
+                    + ". Supported projections: " + projectionNames());
         };
     }
 
-    private static String projectionNamespace(WriterProperties properties, String name) {
-        String specificKey = "sample.writer." + name + ".namespace";
-        String specificRuntime = properties.getRuntimeOverride(specificKey);
-        if (hasText(specificRuntime)) {
-            return specificRuntime;
-        }
-        String baseRuntime = properties.getRuntimeOverride("sample.writer.namespace");
-        if (hasText(baseRuntime)) {
-            return baseRuntime + "." + name;
-        }
-        String specificFile = properties.getFileOptional(specificKey);
-        if (hasText(specificFile)) {
-            return specificFile;
-        }
-        return properties.get("sample.writer.namespace") + "." + name;
-    }
-
-    private static long projectionTtlMillis(WriterProperties properties, String name) {
-        String specificKey = "sample.writer." + name + ".cache-ttl-ms";
-        String specificRuntime = properties.getRuntimeOverride(specificKey);
-        if (hasText(specificRuntime)) {
-            return parsePositiveMillis(specificKey, specificRuntime);
-        }
-        String baseRuntime = properties.getRuntimeOverride("sample.writer.cache-ttl-ms");
-        if (hasText(baseRuntime)) {
-            return parsePositiveMillis("sample.writer.cache-ttl-ms", baseRuntime);
-        }
-        String specificFile = properties.getFileOptional(specificKey);
-        if (hasText(specificFile)) {
-            return parsePositiveMillis(specificKey, specificFile);
-        }
-        return properties.getLong("sample.writer.cache-ttl-ms");
-    }
-
-    private static long parsePositiveMillis(String key, String value) {
-        try {
-            long parsed = Long.parseLong(value);
-            if (parsed <= 0) {
-                throw new IllegalArgumentException("Property must be positive: " + key + "=" + value);
-            }
-            return parsed;
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Property must be a long: " + key + "=" + value, e);
-        }
-    }
-
-    private static boolean hasText(String value) {
-        return value != null && !value.isBlank();
+    private static CacheProjectionSettings setting(List<CacheProjectionSettings> settings, String name) {
+        return settings.stream()
+                .filter(setting -> setting.name().equals(name))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Missing projection setting: " + name));
     }
 
     private record Projection(

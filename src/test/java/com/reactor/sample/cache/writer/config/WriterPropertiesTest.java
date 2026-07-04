@@ -24,6 +24,7 @@ class WriterPropertiesTest {
         assertEquals("crm.customer.meta.refresh", properties.get("sample.writer.meta.lock-name"));
 
         assertEquals(600000L, properties.getLong("sample.writer.cache-ttl-ms"));
+        assertEquals(30000L, properties.getLong("sample.writer.cache-ttl-safety-margin-ms"));
         assertEquals(300000L, properties.getLong("sample.writer.detail.interval-ms"));
         assertEquals(1800000L, properties.getLong("sample.writer.detail.cache-ttl-ms"));
         assertEquals(120000L, properties.getLong("sample.writer.segment.interval-ms"));

@@ -2,6 +2,7 @@ package com.reactor.sample.cache.writer.scheduler;
 
 import com.reactor.sample.cache.writer.cache.CustomerCacheMaterializer;
 import com.reactor.sample.cache.writer.cache.CustomerCacheMaterializer.RefreshResult;
+import com.reactor.sample.cache.writer.config.CacheProjectionSettings;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 
 import java.util.List;
@@ -24,9 +25,16 @@ public final class CacheRefreshScheduler implements AutoCloseable {
     private final AtomicBoolean closed = new AtomicBoolean();
 
     public CacheRefreshScheduler(CustomerCacheMaterializer materializer, WriterProperties properties) {
+        this(materializer, properties, CacheProjectionSettings.resolveAll(properties));
+    }
+
+    public CacheRefreshScheduler(
+            CustomerCacheMaterializer materializer,
+            WriterProperties properties,
+            List<CacheProjectionSettings> projectionSettings) {
         this.materializer = materializer;
-        this.schedules = CustomerCacheMaterializer.projectionNames().stream()
-                .map(projection -> ProjectionSchedule.from(properties, projection))
+        this.schedules = projectionSettings.stream()
+                .map(ProjectionSchedule::from)
                 .toList();
         this.runOnce = properties.getBoolean("sample.writer.run-once");
         this.firstRunDone = new CountDownLatch(schedules.size());
@@ -42,6 +50,7 @@ public final class CacheRefreshScheduler implements AutoCloseable {
         if (closed.get()) {
             return;
         }
+        logConfigurationWarnings("startup");
         if (runOnce) {
             for (ProjectionSchedule schedule : schedules) {
                 executor.schedule(() -> safeRefresh(schedule), schedule.initialDelayMillis(), TimeUnit.MILLISECONDS);
@@ -74,6 +83,7 @@ public final class CacheRefreshScheduler implements AutoCloseable {
 
     private void safeRefresh(ProjectionSchedule schedule) {
         try {
+            logConfigurationWarnings(schedule, "refresh");
             RefreshResult result = materializer.refreshProjection(
                     schedule.projection(),
                     schedule.lockName(),
@@ -96,6 +106,18 @@ public final class CacheRefreshScheduler implements AutoCloseable {
         }
     }
 
+    private void logConfigurationWarnings(String phase) {
+        for (ProjectionSchedule schedule : schedules) {
+            logConfigurationWarnings(schedule, phase);
+        }
+    }
+
+    private static void logConfigurationWarnings(ProjectionSchedule schedule, String phase) {
+        for (String warning : schedule.warnings()) {
+            System.err.println("WARNING cache writer config " + warning + " phase=" + phase);
+        }
+    }
+
     private static int boundedThreads(int configured, int projectionCount) {
         if (configured <= 0) {
             throw new IllegalArgumentException("sample.writer.scheduler-threads must be positive");
@@ -108,91 +130,17 @@ public final class CacheRefreshScheduler implements AutoCloseable {
             long initialDelayMillis,
             long intervalMillis,
             String lockName,
-            long lockTtlMillis) {
+            long lockTtlMillis,
+            List<String> warnings) {
 
-        static ProjectionSchedule from(WriterProperties properties, String projection) {
-            long initialDelayMillis = projectionLong(
-                    properties,
-                    projection,
-                    "initial-delay-ms",
-                    "sample.writer.initial-delay-ms",
-                    false);
-            long intervalMillis = projectionLong(
-                    properties,
-                    projection,
-                    "interval-ms",
-                    "sample.writer.interval-ms",
-                    true);
-            long lockTtlMillis = projectionLong(
-                    properties,
-                    projection,
-                    "lock-ttl-ms",
-                    "sample.writer.lock-ttl-ms",
-                    true);
+        static ProjectionSchedule from(CacheProjectionSettings settings) {
             return new ProjectionSchedule(
-                    projection,
-                    initialDelayMillis,
-                    intervalMillis,
-                    projectionLockName(properties, projection),
-                    lockTtlMillis);
+                    settings.name(),
+                    settings.initialDelayMillis(),
+                    settings.intervalMillis(),
+                    settings.lockName(),
+                    settings.lockTtlMillis(),
+                    settings.warnings());
         }
-    }
-
-    private static String projectionLockName(WriterProperties properties, String projection) {
-        String specificKey = "sample.writer." + projection + ".lock-name";
-        String specificRuntime = properties.getRuntimeOverride(specificKey);
-        if (hasText(specificRuntime)) {
-            return specificRuntime;
-        }
-        String baseRuntime = properties.getRuntimeOverride("sample.writer.lock-name");
-        if (hasText(baseRuntime)) {
-            return baseRuntime + "." + projection;
-        }
-        String specificFile = properties.getFileOptional(specificKey);
-        if (hasText(specificFile)) {
-            return specificFile;
-        }
-        return properties.get("sample.writer.lock-name") + "." + projection;
-    }
-
-    private static long projectionLong(
-            WriterProperties properties,
-            String projection,
-            String suffix,
-            String baseKey,
-            boolean positive) {
-        String specificKey = "sample.writer." + projection + "." + suffix;
-        String specificRuntime = properties.getRuntimeOverride(specificKey);
-        if (hasText(specificRuntime)) {
-            return parseMillis(specificKey, specificRuntime, positive);
-        }
-        String baseRuntime = properties.getRuntimeOverride(baseKey);
-        if (hasText(baseRuntime)) {
-            return parseMillis(baseKey, baseRuntime, positive);
-        }
-        String specificFile = properties.getFileOptional(specificKey);
-        if (hasText(specificFile)) {
-            return parseMillis(specificKey, specificFile, positive);
-        }
-        return parseMillis(baseKey, properties.get(baseKey), positive);
-    }
-
-    private static long parseMillis(String key, String value, boolean positive) {
-        try {
-            long parsed = Long.parseLong(value);
-            if (positive && parsed <= 0) {
-                throw new IllegalArgumentException("Property must be positive: " + key + "=" + value);
-            }
-            if (!positive && parsed < 0) {
-                throw new IllegalArgumentException("Property must not be negative: " + key + "=" + value);
-            }
-            return parsed;
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Property must be a long: " + key + "=" + value, e);
-        }
-    }
-
-    private static boolean hasText(String value) {
-        return value != null && !value.isBlank();
     }
 }
