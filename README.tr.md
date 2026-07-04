@@ -50,7 +50,7 @@ java "-Dsample.writer.run-once=true" `
 Başarılı çalışmada şu mesaja benzer bir çıktı görürsünüz:
 
 ```text
-cache refresh published version=<version> keys=<count>
+cache refresh published versions=detail=<version>,segment=<version>,status=<version>,campaign=<version>,meta=<version> keys=<count>
 ```
 
 Bu işlemden sonra `rest-sample-cache-reader` aynı Redis üzerinden müşteri profilini, segment
@@ -100,23 +100,112 @@ Akış:
 1. `rest-sample-cache-writer`, `sample.writer.interval-ms` aralığıyla uyanır.
 2. Redis üzerinde `sample.writer.lock-name` ile lock alır.
 3. PostgreSQL’den müşteri verisini sayfa sayfa okur.
-4. Redis’e yeni bir versioned snapshot publish eder.
+4. Detail, segment, status, campaign ve metadata için ayrı versioned Redis snapshot’ları publish eder.
 5. `rest-sample-cache-reader`, bu snapshot’ı REST JSON olarak servis eder.
 
 Birden fazla replica güvenlidir. Sadece lock sahibi olan replica publish eder; lock/token/version detayını kullanıcı kodu yönetmez.
 
 ## Ne Üretiyor?
 
-| Projection | Redis abstraction | Gerçek kullanım |
-|---|---|---|
-| Müşteri detayı | `getById(id)` | Müşteri profil ekranı |
-| Müşteri numarası lookup | `getIndex("customer-no", customerNo)` | Çağrı merkezi hızlı arama |
-| Segment listesi | `getIndex("segment", segment)` | Pilot/enterprise müşteri listesi |
-| Status listesi | `getIndex("status", status)` | Aktif/pasif müşteri ekranı |
-| Kampanya adayları | `getIndex("campaign", "retention")` | Pazarlama aday havuzu |
-| Snapshot metadata | `getMeta()` | Operasyonel kontrol/debug |
+| Projection | Namespace | Varsayılan TTL | Redis abstraction | Gerçek kullanım |
+|---|---|---:|---|---|
+| Müşteri detayı | `crm.customer.detail` | `1800000` | `getById(id)` ve `getIndex("customer-no", customerNo)` | Müşteri profil ekranı ve çağrı merkezi hızlı arama |
+| Segment listesi | `crm.customer.segment` | `300000` | `getIndex("segment", segment)` | Pilot/enterprise müşteri listesi |
+| Status listesi | `crm.customer.status` | `300000` | `getIndex("status", status)` | Aktif/pasif müşteri ekranı |
+| Kampanya adayları | `crm.customer.campaign` | `120000` | `getIndex("campaign", "retention")` | Pazarlama aday havuzu |
+| Snapshot metadata | `crm.customer.meta` | `300000` | `getMeta()` | Operasyonel kontrol/debug |
 
 Payload özellikle nested hazırlandı: `customer`, `contact`, `profile`, `loyalty`, `risk`, `addresses`, `lastOrders`, `audit`.
+
+## TTL Modeli
+
+Writer artık iki seviyede TTL kullanabilir:
+
+```properties
+sample.writer.cache-ttl-ms=600000
+sample.writer.detail.cache-ttl-ms=1800000
+sample.writer.segment.cache-ttl-ms=300000
+sample.writer.status.cache-ttl-ms=300000
+sample.writer.campaign.cache-ttl-ms=120000
+sample.writer.meta.cache-ttl-ms=300000
+```
+
+Bütün projection’lar aynı süre yaşayacaksa sadece `sample.writer.cache-ttl-ms` yeterlidir. Veri tiplerinin tazelik ihtiyacı farklıysa projection TTL kullan. Örneğin müşteri detayı daha uzun yaşayabilir, kampanya adayları ise daha kısa TTL ile tutulmalıdır.
+
+Aynı snapshot içindeki rastgele key’lere farklı TTL vermek doğru değildir. Bu, reader tarafında parçalı snapshot görülmesine neden olabilir. Bu örnek bunun yerine ayrı namespace kullanır. Böylece her projection kendi içinde tutarlı kalır.
+
+## Senaryoya Göre TTL Reçeteleri
+
+Bu örnekleri başlangıç noktası olarak kullan. Her veri TTL değeri writer interval değerinden uzun olmalıdır. TTL, refresh interval değerinden kısa olursa reader yeni publish tamamlanmadan önce süresi dolmuş projection görebilir.
+
+### Senaryo: Müşteri Profili Sabit, Kampanya Akışı Daha Taze
+
+Profil ekranı yavaş değişiyor ama kampanya uygunluğu sık değişiyorsa bu ayar doğru başlangıçtır. REST reader müşteri detayını daha uzun süre servis eder. Kampanya verisi daha hızlı yenilenir ve daha erken expire olur.
+
+```properties
+sample.writer.interval-ms=60000
+sample.writer.cache-ttl-ms=600000
+sample.writer.detail.cache-ttl-ms=1800000
+sample.writer.segment.cache-ttl-ms=300000
+sample.writer.status.cache-ttl-ms=300000
+sample.writer.campaign.cache-ttl-ms=120000
+sample.writer.meta.cache-ttl-ms=300000
+```
+
+Operasyonel etkisi: Profil endpoint’leri kaçırılan bir writer çalışmasını daha iyi tolere eder. Kampanya endpoint’leri daha taze kalır ve writer durursa daha hızlı cache miss üretir.
+
+### Senaryo: Bütün Veriler İçin Tek Tazelik Penceresi
+
+Bütün projection’lar aynı kaynaktan üretiliyor ve aynı tazelik süresi yeterliyse bu model daha basittir. İlk production geçişi için iyi başlangıçtır.
+
+```powershell
+java "-Dsample.writer.namespace=crm.customer.prod" `
+  "-Dsample.writer.cache-ttl-ms=900000" `
+  "-Dsample.writer.interval-ms=300000" `
+  -cp "target\classes;$cp" `
+  com.reactor.sample.cache.writer.app.RestSampleCacheWriterApplication
+```
+
+Runtime’da verilen base değer dosyadaki projection default’larının önüne geçer. Writer otomatik olarak şu namespace’leri üretir: `crm.customer.prod.detail`, `crm.customer.prod.segment`, `crm.customer.prod.status`, `crm.customer.prod.campaign` ve `crm.customer.prod.meta`.
+
+### Senaryo: Yoğun Trafikli Kampanya Ekranı
+
+Kampanya endpoint’i yüksek trafik alıyor ve kural değişikliklerini hızlı yansıtmak zorundaysa campaign TTL kısa tutulur. Detail TTL uzun kalır; böylece Redis’e gereksiz detay yazma baskısı oluşturulmaz.
+
+```yaml
+env:
+  - name: SAMPLE_WRITER_INTERVAL_MS
+    value: "30000"
+  - name: SAMPLE_WRITER_LOCK_TTL_MS
+    value: "120000"
+  - name: SAMPLE_WRITER_DETAIL_CACHE_TTL_MS
+    value: "1800000"
+  - name: SAMPLE_WRITER_SEGMENT_CACHE_TTL_MS
+    value: "180000"
+  - name: SAMPLE_WRITER_STATUS_CACHE_TTL_MS
+    value: "180000"
+  - name: SAMPLE_WRITER_CAMPAIGN_CACHE_TTL_MS
+    value: "45000"
+  - name: SAMPLE_WRITER_META_CACHE_TTL_MS
+    value: "60000"
+```
+
+Operasyonel etkisi: Kampanya tazeliği artar, fakat writer daha sık çalışır. DB sorgu süresi, Redis write latency ve `reactor.cache.redis.max-write-inflight` birlikte izlenmelidir.
+
+### Senaryo: Redis Memory Baskısı Var
+
+Redis memory limiti dar ve eski read model’lerin hızlı temizlenmesi gerekiyorsa bu reçete kullanılabilir. Bu model düşük trafikli back-office ekranları için uygundur. Kritik müşteri API’leri için daha uzun TTL tercih edilmelidir.
+
+```properties
+sample.writer.interval-ms=120000
+sample.writer.detail.cache-ttl-ms=360000
+sample.writer.segment.cache-ttl-ms=240000
+sample.writer.status.cache-ttl-ms=240000
+sample.writer.campaign.cache-ttl-ms=180000
+sample.writer.meta.cache-ttl-ms=240000
+```
+
+Operasyonel etkisi: Redis eski key’leri daha kısa süre tutar. Bedeli, writer kesintilerine daha düşük toleranstır. Writer TTL süresinden uzun durursa reader endpoint’leri doğru şekilde cache miss response döner.
 
 ## Hızlı Çalıştırma
 
@@ -148,7 +237,7 @@ java "-Dsample.writer.run-once=true" `
 Beklenen çıktı:
 
 ```text
-cache refresh published version=<version> keys=<count>
+cache refresh published versions=detail=<version>,segment=<version>,status=<version>,campaign=<version>,meta=<version> keys=<count>
 ```
 
 ## Production Redis Topolojisi
@@ -193,7 +282,17 @@ Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-sa
 |---|---:|---|
 | `sample.writer.interval-ms` | `60000` | Verinin ne sıklıkla Redis’e basılacağını belirler. Az değişen veri için artır. |
 | `sample.writer.lock-ttl-ms` | `300000` | Multiple replica’da aynı işi tek pod’un yapmasını sağlar. Normal refresh süresinden uzun olmalı. |
-| `sample.writer.cache-ttl-ms` | `600000` | Redis verisinin yaşam süresi. Refresh interval’dan uzun tut. |
+| `sample.writer.cache-ttl-ms` | `600000` | Base Redis veri yaşam süresi. Runtime override verirsen projection-specific TTL ayrıca verilmediği sürece bütün projection’lara uygulanır. |
+| `sample.writer.detail.namespace` | `crm.customer.detail` | Müşteri detayı ve müşteri numarası lookup namespace’i. Reader aynı değeri kullanmalı. |
+| `sample.writer.detail.cache-ttl-ms` | `1800000` | Müşteri detay payload yaşam süresi. Profil verisi yavaş değişiyorsa artırılabilir. |
+| `sample.writer.segment.namespace` | `crm.customer.segment` | Segment listesi namespace’i. |
+| `sample.writer.segment.cache-ttl-ms` | `300000` | Segment listesi yaşam süresi. Segment üyeliği sık değişiyorsa düşür. |
+| `sample.writer.status.namespace` | `crm.customer.status` | Status listesi namespace’i. |
+| `sample.writer.status.cache-ttl-ms` | `300000` | Status listesi yaşam süresi. |
+| `sample.writer.campaign.namespace` | `crm.customer.campaign` | Kampanya adayları namespace’i. |
+| `sample.writer.campaign.cache-ttl-ms` | `120000` | Kampanya adayları yaşam süresi. Uygunluk sık değişiyorsa kısa tut. |
+| `sample.writer.meta.namespace` | `crm.customer.meta` | Metadata namespace’i. |
+| `sample.writer.meta.cache-ttl-ms` | `300000` | Metadata yaşam süresi. |
 | `sample.writer.snapshot-batch-size` | `256` | Versioned snapshot key’leri için Redis write batch boyutu. Memory-first pod’da düşür; Redis write latency düşük ama refresh yavaşsa ölçerek artır. |
 | `sample.writer.page-size` | `500` | DB’den kaç kayıtlık batch okunacağını belirler. Satırlar küçükse ve DB güçlü ise dikkatli artır. |
 | `sample.db.maximum-pool-size` | `2` | Bu process request serve etmiyor, scheduled writer. Düşük tutmak doğru. |

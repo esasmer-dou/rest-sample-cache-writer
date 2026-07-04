@@ -49,13 +49,23 @@ public final class WriterProperties {
     }
 
     public String getOptional(String key) {
+        String value = getRuntimeOverride(key);
+        if (value == null) {
+            value = properties.getProperty(key);
+        }
+        return value == null ? "" : value.trim();
+    }
+
+    public String getRuntimeOverride(String key) {
         String value = System.getProperty(key);
         if (value == null) {
             value = System.getenv(toEnvKey(key));
         }
-        if (value == null) {
-            value = properties.getProperty(key);
-        }
+        return value == null ? null : value.trim();
+    }
+
+    public String getFileOptional(String key) {
+        String value = properties.getProperty(key);
         return value == null ? "" : value.trim();
     }
 

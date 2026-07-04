@@ -1,7 +1,7 @@
 package com.reactor.sample.cache.writer.scheduler;
 
-import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
 import com.reactor.sample.cache.writer.cache.CustomerCacheMaterializer;
+import com.reactor.sample.cache.writer.cache.CustomerCacheMaterializer.RefreshResult;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 
 import java.util.concurrent.CountDownLatch;
@@ -57,11 +57,11 @@ public final class CacheRefreshScheduler implements AutoCloseable {
 
     private void safeRefresh() {
         try {
-            SnapshotResult result = materializer.refresh();
+            RefreshResult result = materializer.refresh();
             if (result.skippedLocked()) {
                 System.out.println("cache refresh skipped: another replica owns the Redis lock");
             } else {
-                System.out.println("cache refresh published version=" + result.version()
+                System.out.println("cache refresh published versions=" + result.versions()
                         + " keys=" + result.writtenKeys());
             }
         } catch (Throwable error) {

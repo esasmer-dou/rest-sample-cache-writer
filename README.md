@@ -46,7 +46,7 @@ java "-Dsample.writer.run-once=true" `
 Expected output:
 
 ```text
-cache refresh published version=<version> keys=<count>
+cache refresh published versions=detail=<version>,segment=<version>,status=<version>,campaign=<version>,meta=<version> keys=<count>
 ```
 
 After this, `rest-sample-cache-reader` can serve customer profiles, segment lists, and campaign
@@ -96,25 +96,114 @@ Example flow:
 1. `rest-sample-cache-writer` wakes up every `sample.writer.interval-ms`.
 2. It takes a Redis lock with `sample.writer.lock-name`.
 3. It reads customers from PostgreSQL in pages.
-4. It publishes a new versioned Redis snapshot.
+4. It publishes separate versioned Redis snapshots for detail, segment, status, campaign, and metadata.
 5. `rest-sample-cache-reader` serves the snapshot as REST JSON.
 
-Multiple replicas are safe. Only one replica publishes because `VersionedJsonCacheWriter.refreshSnapshotWithLock(...)` owns the lock flow.
+Multiple replicas are safe. Only one replica publishes because the writer keeps a single Redis lock around the projection refresh flow.
 
 ## What It Publishes
 
 The writer creates these business projections:
 
-| Projection | Redis abstraction | Real API consumer |
-|---|---|---|
-| Customer detail | `getById(id)` | Customer profile page |
-| Customer number lookup | `getIndex("customer-no", customerNo)` | Call center quick lookup |
-| Segment list | `getIndex("segment", segment)` | Pilot/enterprise customer list |
-| Status list | `getIndex("status", status)` | Active/passive customer screen |
-| Campaign candidates | `getIndex("campaign", "retention")` | Marketing candidate feed |
-| Snapshot metadata | `getMeta()` | Operational health/debug |
+| Projection | Namespace | Default TTL | Redis abstraction | Real API consumer |
+|---|---|---:|---|---|
+| Customer detail | `crm.customer.detail` | `1800000` | `getById(id)` and `getIndex("customer-no", customerNo)` | Customer profile and call center lookup |
+| Segment list | `crm.customer.segment` | `300000` | `getIndex("segment", segment)` | Pilot/enterprise customer list |
+| Status list | `crm.customer.status` | `300000` | `getIndex("status", status)` | Active/passive customer screen |
+| Campaign candidates | `crm.customer.campaign` | `120000` | `getIndex("campaign", "retention")` | Marketing candidate feed |
+| Snapshot metadata | `crm.customer.meta` | `300000` | `getMeta()` | Operational health/debug |
 
 The payload is intentionally nested: `customer`, `contact`, `profile`, `loyalty`, `risk`, `addresses`, `lastOrders`, and `audit`.
+
+## TTL Model
+
+The writer supports two TTL levels:
+
+```properties
+sample.writer.cache-ttl-ms=600000
+sample.writer.detail.cache-ttl-ms=1800000
+sample.writer.segment.cache-ttl-ms=300000
+sample.writer.status.cache-ttl-ms=300000
+sample.writer.campaign.cache-ttl-ms=120000
+sample.writer.meta.cache-ttl-ms=300000
+```
+
+Use the base `sample.writer.cache-ttl-ms` when all projections can live for the same period. Use projection TTLs when data freshness is different. For example, customer detail can live longer, but campaign candidates may need a shorter TTL.
+
+Do not put different TTLs on random keys inside the same snapshot. That creates partial snapshots. This sample uses separate namespaces instead, so each projection stays internally consistent.
+
+## TTL Recipes By Scenario
+
+Use these examples as starting points. Keep every data TTL longer than the writer interval. If TTL is shorter than the refresh interval, readers can see expired projections before the next publish finishes.
+
+### Scenario: Stable Customer Profile, Fresh Campaign Feed
+
+Use this when profile pages change slowly, but campaign eligibility changes often. The REST reader keeps serving customer details for longer, while campaign data expires faster.
+
+```properties
+sample.writer.interval-ms=60000
+sample.writer.cache-ttl-ms=600000
+sample.writer.detail.cache-ttl-ms=1800000
+sample.writer.segment.cache-ttl-ms=300000
+sample.writer.status.cache-ttl-ms=300000
+sample.writer.campaign.cache-ttl-ms=120000
+sample.writer.meta.cache-ttl-ms=300000
+```
+
+Operational effect: profile endpoints tolerate a missed writer run better. Campaign endpoints refresh quickly and expire sooner if the writer stops.
+
+### Scenario: One Freshness Window For All Data
+
+Use this when all projections are produced from the same source and the same freshness window is acceptable. This is simpler for first production rollout.
+
+```powershell
+java "-Dsample.writer.namespace=crm.customer.prod" `
+  "-Dsample.writer.cache-ttl-ms=900000" `
+  "-Dsample.writer.interval-ms=300000" `
+  -cp "target\classes;$cp" `
+  com.reactor.sample.cache.writer.app.RestSampleCacheWriterApplication
+```
+
+Runtime base override wins over file defaults. The writer derives these namespaces automatically: `crm.customer.prod.detail`, `crm.customer.prod.segment`, `crm.customer.prod.status`, `crm.customer.prod.campaign`, and `crm.customer.prod.meta`.
+
+### Scenario: High-Traffic Campaign Screen
+
+Use this when a campaign endpoint receives a lot of traffic and must reflect frequent rule changes. Keep campaign TTL short, but keep detail TTL longer to avoid unnecessary Redis churn.
+
+```yaml
+env:
+  - name: SAMPLE_WRITER_INTERVAL_MS
+    value: "30000"
+  - name: SAMPLE_WRITER_LOCK_TTL_MS
+    value: "120000"
+  - name: SAMPLE_WRITER_DETAIL_CACHE_TTL_MS
+    value: "1800000"
+  - name: SAMPLE_WRITER_SEGMENT_CACHE_TTL_MS
+    value: "180000"
+  - name: SAMPLE_WRITER_STATUS_CACHE_TTL_MS
+    value: "180000"
+  - name: SAMPLE_WRITER_CAMPAIGN_CACHE_TTL_MS
+    value: "45000"
+  - name: SAMPLE_WRITER_META_CACHE_TTL_MS
+    value: "60000"
+```
+
+Operational effect: campaign freshness improves, but writer runs more often. Watch DB query time, Redis write latency, and `reactor.cache.redis.max-write-inflight`.
+
+### Scenario: Memory-Sensitive Redis
+
+Use this when Redis memory is tight and stale read models should disappear quickly. This is valid for low-traffic back-office screens, not for critical always-on customer APIs.
+
+```properties
+sample.writer.interval-ms=120000
+sample.writer.detail.cache-ttl-ms=360000
+sample.writer.segment.cache-ttl-ms=240000
+sample.writer.status.cache-ttl-ms=240000
+sample.writer.campaign.cache-ttl-ms=180000
+sample.writer.meta.cache-ttl-ms=240000
+```
+
+Operational effect: Redis retains fewer old keys. The trade-off is lower tolerance for writer outages. If the writer is stopped longer than the TTL, reader endpoints correctly return cache-miss responses.
 
 ## Quick Start
 
@@ -146,7 +235,7 @@ java "-Dsample.writer.run-once=true" `
 Expected output:
 
 ```text
-cache refresh published version=<version> keys=<count>
+cache refresh published versions=detail=<version>,segment=<version>,status=<version>,campaign=<version>,meta=<version> keys=<count>
 ```
 
 ## Production Redis Topology
@@ -191,7 +280,17 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 |---|---:|---|
 | `sample.writer.interval-ms` | `60000` | How often the writer refreshes Redis. Increase for low-change data. |
 | `sample.writer.lock-ttl-ms` | `300000` | Prevents multiple replicas from publishing at the same time. Must be longer than a normal refresh. |
-| `sample.writer.cache-ttl-ms` | `600000` | Redis data lifetime. Keep it longer than refresh interval. |
+| `sample.writer.cache-ttl-ms` | `600000` | Base Redis data lifetime. Runtime override applies to all projections unless a projection-specific TTL is also set. |
+| `sample.writer.detail.namespace` | `crm.customer.detail` | Customer detail and customer-number lookup namespace. Reader must use the same value. |
+| `sample.writer.detail.cache-ttl-ms` | `1800000` | Detail payload lifetime. Raise if customer profile changes slowly. |
+| `sample.writer.segment.namespace` | `crm.customer.segment` | Segment list namespace. |
+| `sample.writer.segment.cache-ttl-ms` | `300000` | Segment list lifetime. Lower when segment membership changes often. |
+| `sample.writer.status.namespace` | `crm.customer.status` | Status list namespace. |
+| `sample.writer.status.cache-ttl-ms` | `300000` | Status list lifetime. |
+| `sample.writer.campaign.namespace` | `crm.customer.campaign` | Campaign candidate namespace. |
+| `sample.writer.campaign.cache-ttl-ms` | `120000` | Campaign candidate lifetime. Keep short when eligibility changes often. |
+| `sample.writer.meta.namespace` | `crm.customer.meta` | Metadata namespace. |
+| `sample.writer.meta.cache-ttl-ms` | `300000` | Metadata lifetime. |
 | `sample.writer.snapshot-batch-size` | `256` | Redis write batch size for versioned snapshot keys. Lower for memory-first pods; raise carefully if Redis write latency is low and refresh is too slow. |
 | `sample.writer.page-size` | `500` | DB read batch size. Increase carefully if rows are small and DB is strong. |
 | `sample.db.maximum-pool-size` | `2` | Writer is scheduled, not high-concurrency. Keep this low. |
