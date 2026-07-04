@@ -11,9 +11,10 @@ import com.reactor.sample.cache.writer.json.CustomerJsonWriter;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public final class CustomerCacheMaterializer {
+
+    private static final List<String> PROJECTIONS = List.of("detail", "segment", "status", "campaign", "meta");
 
     private final PostgresCustomerRepository repository;
     private final RustCache cache;
@@ -22,8 +23,6 @@ public final class CustomerCacheMaterializer {
     private final Projection statusProjection;
     private final Projection campaignProjection;
     private final Projection metaProjection;
-    private final String lockName;
-    private final long lockTtlMillis;
     private final int pageSize;
     private final int segmentIndexLimit;
     private final int statusIndexLimit;
@@ -38,66 +37,25 @@ public final class CustomerCacheMaterializer {
         this.statusProjection = projection(cache, properties, "status", batchSize);
         this.campaignProjection = projection(cache, properties, "campaign", batchSize);
         this.metaProjection = projection(cache, properties, "meta", batchSize);
-        this.lockName = properties.get("sample.writer.lock-name");
-        this.lockTtlMillis = properties.getLong("sample.writer.lock-ttl-ms");
         this.pageSize = properties.getInt("sample.writer.page-size");
         this.segmentIndexLimit = properties.getInt("sample.writer.segment-index-limit");
         this.statusIndexLimit = properties.getInt("sample.writer.status-index-limit");
         this.campaignCandidateLimit = properties.getInt("sample.writer.campaign-candidate-limit");
     }
 
-    public RefreshResult refresh() {
+    public static List<String> projectionNames() {
+        return PROJECTIONS;
+    }
+
+    public RefreshResult refreshProjection(String projectionName, String lockName, long lockTtlMillis) {
+        Projection projection = projectionByName(projectionName);
         RefreshResult[] result = new RefreshResult[1];
         boolean ran = cache.locks().runOnceChecked(lockName, lockTtlMillis, lock -> {
-            PublishedSnapshots published = new PublishedSnapshots();
-            AtomicInteger rowCount = new AtomicInteger();
-
-            SnapshotResult detailResult = detailProjection.writer().refreshSnapshot(detailProjection.ttlMillis(), snapshot ->
-                    repository.forEachCustomerPage(pageSize, page -> {
-                        for (SampleCustomer customer : page) {
-                            byte[] detail = CustomerJsonWriter.customerDetail(customer);
-                            snapshot.putById(customer.id(), detail);
-                            snapshot.putIndex("customer-no", customer.customerNo(), detail);
-                            rowCount.incrementAndGet();
-                        }
-                    }));
-            published.add(detailProjection.name(), detailResult);
+            SnapshotResult snapshot = writeProjection(projection);
             lock.ensureValid();
-
-            List<String> segments = repository.findSegments();
-            SnapshotResult segmentResult = segmentProjection.writer().refreshSnapshot(segmentProjection.ttlMillis(), snapshot -> {
-                for (String segment : segments) {
-                    List<SampleCustomer> customers = repository.findCustomersBySegment(segment, segmentIndexLimit);
-                    snapshot.putIndex("segment", segment, CustomerJsonWriter.customerSummaries("segment", segment, customers));
-                }
-            });
-            published.add(segmentProjection.name(), segmentResult);
-            lock.ensureValid();
-
-            List<String> statuses = repository.findStatuses();
-            SnapshotResult statusResult = statusProjection.writer().refreshSnapshot(statusProjection.ttlMillis(), snapshot -> {
-                for (String status : statuses) {
-                    List<SampleCustomer> customers = repository.findCustomersByStatus(status, statusIndexLimit);
-                    snapshot.putIndex("status", status, CustomerJsonWriter.customerSummaries("status", status, customers));
-                }
-            });
-            published.add(statusProjection.name(), statusResult);
-            lock.ensureValid();
-
-            List<SampleCustomer> activeCustomers = repository.findCustomersByStatus("active", campaignCandidateLimit);
-            SnapshotResult campaignResult = campaignProjection.writer().refreshSnapshot(campaignProjection.ttlMillis(), snapshot ->
-                    snapshot.putIndex("campaign", "retention", CustomerJsonWriter.campaignCandidates("retention", activeCustomers)));
-            published.add(campaignProjection.name(), campaignResult);
-            lock.ensureValid();
-
-            CustomerCounts counts = repository.countCustomersByStatus();
-            SnapshotResult metaResult = metaProjection.writer().refreshSnapshot(metaProjection.ttlMillis(), snapshot ->
-                    snapshot.putMeta(CustomerJsonWriter.meta(counts, rowCount.get(), Instant.now(), segments, statuses)));
-            published.add(metaProjection.name(), metaResult);
-
-            result[0] = published.toResult();
+            result[0] = RefreshResult.publishedResult(projection.name(), snapshot.version(), snapshot.writtenKeys());
         });
-        return ran ? result[0] : RefreshResult.skippedResult();
+        return ran ? result[0] : RefreshResult.skippedResult(projection.name());
     }
 
     private static Projection projection(RustCache cache, WriterProperties properties, String name, int batchSize) {
@@ -108,6 +66,74 @@ public final class CustomerCacheMaterializer {
                 namespace,
                 ttlMillis,
                 cache.versionedJsonWriter(namespace, batchSize));
+    }
+
+    private SnapshotResult writeProjection(Projection projection) throws Exception {
+        return switch (projection.name()) {
+            case "detail" -> writeDetail(projection);
+            case "segment" -> writeSegment(projection);
+            case "status" -> writeStatus(projection);
+            case "campaign" -> writeCampaign(projection);
+            case "meta" -> writeMeta(projection);
+            default -> throw new IllegalArgumentException("Unsupported projection: " + projection.name());
+        };
+    }
+
+    private SnapshotResult writeDetail(Projection projection) throws Exception {
+        return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
+                repository.forEachCustomerPage(pageSize, page -> {
+                    for (SampleCustomer customer : page) {
+                        byte[] detail = CustomerJsonWriter.customerDetail(customer);
+                        snapshot.putById(customer.id(), detail);
+                        snapshot.putIndex("customer-no", customer.customerNo(), detail);
+                    }
+                }));
+    }
+
+    private SnapshotResult writeSegment(Projection projection) throws Exception {
+        List<String> segments = repository.findSegments();
+        return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot -> {
+            for (String segment : segments) {
+                List<SampleCustomer> customers = repository.findCustomersBySegment(segment, segmentIndexLimit);
+                snapshot.putIndex("segment", segment, CustomerJsonWriter.customerSummaries("segment", segment, customers));
+            }
+        });
+    }
+
+    private SnapshotResult writeStatus(Projection projection) throws Exception {
+        List<String> statuses = repository.findStatuses();
+        return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot -> {
+            for (String status : statuses) {
+                List<SampleCustomer> customers = repository.findCustomersByStatus(status, statusIndexLimit);
+                snapshot.putIndex("status", status, CustomerJsonWriter.customerSummaries("status", status, customers));
+            }
+        });
+    }
+
+    private SnapshotResult writeCampaign(Projection projection) throws Exception {
+        List<SampleCustomer> activeCustomers = repository.findCustomersByStatus("active", campaignCandidateLimit);
+        return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
+                snapshot.putIndex("campaign", "retention", CustomerJsonWriter.campaignCandidates("retention", activeCustomers)));
+    }
+
+    private SnapshotResult writeMeta(Projection projection) throws Exception {
+        CustomerCounts counts = repository.countCustomersByStatus();
+        List<String> segments = repository.findSegments();
+        List<String> statuses = repository.findStatuses();
+        return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
+                snapshot.putMeta(CustomerJsonWriter.meta(counts, counts.total(), Instant.now(), segments, statuses)));
+    }
+
+    private Projection projectionByName(String projectionName) {
+        return switch (projectionName) {
+            case "detail" -> detailProjection;
+            case "segment" -> segmentProjection;
+            case "status" -> statusProjection;
+            case "campaign" -> campaignProjection;
+            case "meta" -> metaProjection;
+            default -> throw new IllegalArgumentException("Unsupported projection: " + projectionName
+                    + ". Supported projections: " + PROJECTIONS);
+        };
     }
 
     private static String projectionNamespace(WriterProperties properties, String name) {
@@ -166,30 +192,14 @@ public final class CustomerCacheMaterializer {
             long ttlMillis,
             VersionedJsonCacheWriter writer) {}
 
-    public record RefreshResult(boolean published, boolean skippedLocked, String versions, int writtenKeys) {
+    public record RefreshResult(String projection, boolean published, boolean skippedLocked, String version, int writtenKeys) {
 
-        static RefreshResult skippedResult() {
-            return new RefreshResult(false, true, "", 0);
-        }
-    }
-
-    private static final class PublishedSnapshots {
-        private final StringBuilder versions = new StringBuilder(128);
-        private int writtenKeys;
-
-        void add(String projection, SnapshotResult result) {
-            if (!result.published()) {
-                return;
-            }
-            if (!versions.isEmpty()) {
-                versions.append(',');
-            }
-            versions.append(projection).append('=').append(result.version());
-            writtenKeys += result.writtenKeys();
+        static RefreshResult skippedResult(String projection) {
+            return new RefreshResult(projection, false, true, "", 0);
         }
 
-        RefreshResult toResult() {
-            return new RefreshResult(true, false, versions.toString(), writtenKeys);
+        static RefreshResult publishedResult(String projection, String version, int writtenKeys) {
+            return new RefreshResult(projection, true, false, version, writtenKeys);
         }
     }
 }

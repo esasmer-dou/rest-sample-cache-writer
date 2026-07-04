@@ -61,7 +61,8 @@ java "-Dsample.writer.run-once=true" `
 Expected output:
 
 ```text
-cache refresh published versions=detail=<version>,segment=<version>,status=<version>,campaign=<version>,meta=<version> keys=<count>
+cache refresh published projection=detail version=<version> keys=<count>
+cache refresh published projection=campaign version=<version> keys=<count>
 ```
 
 After this, `rest-sample-cache-reader` can serve customer profiles, segment lists, and campaign
@@ -108,13 +109,13 @@ Use this sample when a service owns PostgreSQL data but your REST pods should no
 
 Example flow:
 
-1. `rest-sample-cache-writer` wakes up every `sample.writer.interval-ms`.
-2. It takes a Redis lock with `sample.writer.lock-name`.
-3. It reads customers from PostgreSQL in pages.
-4. It publishes separate versioned Redis snapshots for detail, segment, status, campaign, and metadata.
+1. `rest-sample-cache-writer` starts one scheduled job per projection.
+2. Each projection has its own interval.
+3. Each projection has its own Redis lock.
+4. The lock owner reads PostgreSQL and publishes that projection.
 5. `rest-sample-cache-reader` serves the snapshot as REST JSON.
 
-Multiple replicas are safe. Only one replica publishes because the writer keeps a single Redis lock around the projection refresh flow.
+Multiple replicas are safe. Two replicas can publish different projections at the same time. The same projection is still protected by one Redis lock.
 
 ## What It Publishes
 
@@ -149,7 +150,7 @@ Do not put different TTLs on random keys inside the same snapshot. That creates 
 
 ## TTL Recipes By Scenario
 
-Use these examples as starting points. Keep every data TTL longer than the writer interval. If TTL is shorter than the refresh interval, readers can see expired projections before the next publish finishes.
+Use these examples as starting points. Keep every data TTL longer than that projection's refresh interval. If TTL is shorter than the interval, readers can see expired projections before the next publish finishes.
 
 ### Scenario: Stable Customer Profile, Fresh Campaign Feed
 
@@ -157,6 +158,11 @@ Use this when profile pages change slowly, but campaign eligibility changes ofte
 
 ```properties
 sample.writer.interval-ms=60000
+sample.writer.detail.interval-ms=300000
+sample.writer.segment.interval-ms=120000
+sample.writer.status.interval-ms=120000
+sample.writer.campaign.interval-ms=30000
+sample.writer.meta.interval-ms=60000
 sample.writer.cache-ttl-ms=600000
 sample.writer.detail.cache-ttl-ms=1800000
 sample.writer.segment.cache-ttl-ms=300000
@@ -181,6 +187,8 @@ java "-Dsample.writer.namespace=crm.customer.prod" `
 
 Runtime base override wins over file defaults. The writer derives these namespaces automatically: `crm.customer.prod.detail`, `crm.customer.prod.segment`, `crm.customer.prod.status`, `crm.customer.prod.campaign`, and `crm.customer.prod.meta`.
 
+The same rule applies to lock names. If you pass `-Dsample.writer.lock-name=crm.customer.prod.refresh`, the writer derives `crm.customer.prod.refresh.detail`, `crm.customer.prod.refresh.segment`, and the other projection locks.
+
 ### Scenario: High-Traffic Campaign Screen
 
 Use this when a campaign endpoint receives a lot of traffic and must reflect frequent rule changes. Keep campaign TTL short, but keep detail TTL longer to avoid unnecessary Redis churn.
@@ -191,6 +199,18 @@ env:
     value: "30000"
   - name: SAMPLE_WRITER_LOCK_TTL_MS
     value: "120000"
+  - name: SAMPLE_WRITER_SCHEDULER_THREADS
+    value: "2"
+  - name: SAMPLE_WRITER_DETAIL_INTERVAL_MS
+    value: "300000"
+  - name: SAMPLE_WRITER_SEGMENT_INTERVAL_MS
+    value: "120000"
+  - name: SAMPLE_WRITER_STATUS_INTERVAL_MS
+    value: "120000"
+  - name: SAMPLE_WRITER_CAMPAIGN_INTERVAL_MS
+    value: "30000"
+  - name: SAMPLE_WRITER_META_INTERVAL_MS
+    value: "60000"
   - name: SAMPLE_WRITER_DETAIL_CACHE_TTL_MS
     value: "1800000"
   - name: SAMPLE_WRITER_SEGMENT_CACHE_TTL_MS
@@ -211,6 +231,11 @@ Use this when Redis memory is tight and stale read models should disappear quick
 
 ```properties
 sample.writer.interval-ms=120000
+sample.writer.detail.interval-ms=300000
+sample.writer.segment.interval-ms=120000
+sample.writer.status.interval-ms=120000
+sample.writer.campaign.interval-ms=60000
+sample.writer.meta.interval-ms=120000
 sample.writer.detail.cache-ttl-ms=360000
 sample.writer.segment.cache-ttl-ms=240000
 sample.writer.status.cache-ttl-ms=240000
@@ -250,7 +275,8 @@ java "-Dsample.writer.run-once=true" `
 Expected output:
 
 ```text
-cache refresh published versions=detail=<version>,segment=<version>,status=<version>,campaign=<version>,meta=<version> keys=<count>
+cache refresh published projection=detail version=<version> keys=<count>
+cache refresh published projection=campaign version=<version> keys=<count>
 ```
 
 ## Production Redis Topology
@@ -293,17 +319,34 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 
 | Property | Default | What it does | When to change |
 |---|---:|---|---|
-| `sample.writer.interval-ms` | `60000` | Runs the refresh job on this interval. | Increase for slow-changing data. Lower only if DB and Redis can handle it. |
-| `sample.writer.lock-ttl-ms` | `300000` | Keeps only one writer replica active. | Set longer than a normal refresh duration. |
+| `sample.writer.interval-ms` | `60000` | Base refresh interval. Projection interval overrides it. | Use as a shared default. |
+| `sample.writer.lock-name` | `crm.customer.refresh` | Base lock name. Projection locks are derived from it unless explicitly set. | Change per cache domain. Keep all replicas aligned. |
+| `sample.writer.lock-ttl-ms` | `300000` | Base lock TTL. Projection lock TTL overrides it. | Set longer than that projection's normal refresh duration. |
+| `sample.writer.scheduler-threads` | `2` | Number of local projection scheduler threads. | Keep low for small pods. Raise only if one writer replica must run projections in parallel. |
 | `sample.writer.cache-ttl-ms` | `600000` | Base Redis data lifetime. | Use when all projections can share one TTL. |
+| `sample.writer.detail.interval-ms` | `300000` | Refresh interval for customer detail. | Increase for stable profile data. |
+| `sample.writer.detail.lock-name` | `crm.customer.detail.refresh` | Redis lock for detail refresh. | Change only with all writer replicas. |
+| `sample.writer.detail.lock-ttl-ms` | `300000` | Detail lock lifetime. | Keep longer than detail refresh time. |
 | `sample.writer.detail.namespace` | `crm.customer.detail` | Stores customer detail and customer-number lookup. | Change with the matching reader namespace. |
 | `sample.writer.detail.cache-ttl-ms` | `1800000` | Sets customer detail lifetime. | Raise for stable profile data. Lower for stricter freshness. |
+| `sample.writer.segment.interval-ms` | `120000` | Refresh interval for segment lists. | Lower if segment membership changes often. |
+| `sample.writer.segment.lock-name` | `crm.customer.segment.refresh` | Redis lock for segment refresh. | Change only with all writer replicas. |
+| `sample.writer.segment.lock-ttl-ms` | `120000` | Segment lock lifetime. | Keep longer than segment refresh time. |
 | `sample.writer.segment.namespace` | `crm.customer.segment` | Stores segment list projections. | Change only with reader config. |
 | `sample.writer.segment.cache-ttl-ms` | `300000` | Sets segment list lifetime. | Lower when segment membership changes often. |
+| `sample.writer.status.interval-ms` | `120000` | Refresh interval for status lists. | Lower when active/passive status changes often. |
+| `sample.writer.status.lock-name` | `crm.customer.status.refresh` | Redis lock for status refresh. | Change only with all writer replicas. |
+| `sample.writer.status.lock-ttl-ms` | `120000` | Status lock lifetime. | Keep longer than status refresh time. |
 | `sample.writer.status.namespace` | `crm.customer.status` | Stores status list projections. | Change only with reader config. |
 | `sample.writer.status.cache-ttl-ms` | `300000` | Sets status list lifetime. | Lower when active/passive status changes often. |
+| `sample.writer.campaign.interval-ms` | `30000` | Refresh interval for campaign candidates. | Lower for fresher campaign feeds. |
+| `sample.writer.campaign.lock-name` | `crm.customer.campaign.refresh` | Redis lock for campaign refresh. | Change only with all writer replicas. |
+| `sample.writer.campaign.lock-ttl-ms` | `120000` | Campaign lock lifetime. | Keep longer than campaign refresh time. |
 | `sample.writer.campaign.namespace` | `crm.customer.campaign` | Stores campaign candidate projections. | Change only with reader config. |
 | `sample.writer.campaign.cache-ttl-ms` | `120000` | Sets campaign candidate lifetime. | Keep short when campaign rules change often. |
+| `sample.writer.meta.interval-ms` | `60000` | Refresh interval for metadata. | Keep close to operational visibility needs. |
+| `sample.writer.meta.lock-name` | `crm.customer.meta.refresh` | Redis lock for metadata refresh. | Change only with all writer replicas. |
+| `sample.writer.meta.lock-ttl-ms` | `120000` | Metadata lock lifetime. | Keep longer than metadata refresh time. |
 | `sample.writer.meta.namespace` | `crm.customer.meta` | Stores snapshot metadata. | Change only with reader config. |
 | `sample.writer.meta.cache-ttl-ms` | `300000` | Sets metadata lifetime. | Keep close to the shortest business projection TTL. |
 | `sample.writer.snapshot-batch-size` | `256` | Controls Redis batch write size. | Lower for small memory pods. Raise only if refresh is too slow. |
@@ -326,6 +369,7 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 | Snapshot | A complete published version of one projection. |
 | Current version | The Redis pointer that tells the reader which snapshot is active. |
 | Cache miss | Redis does not have the requested data. The reader returns a controlled not-found response. |
+| Projection lock | Redis lock that protects one projection refresh. Different projections can run at the same time. |
 | Backpressure | A hard limit that prevents queues and memory from growing without control. |
 | Sentinel | Redis high-availability mode with automatic primary failover. |
 | Cluster | Redis sharding mode. Data is split across nodes. |
@@ -337,4 +381,4 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 - Do not put REST or Dubbo into this writer unless there is a hard product reason.
 - Prefer precomputed JSON for read-heavy screens.
 - Keep `sample.db.maximum-pool-size` low. This is a batch writer, not a request-serving app.
-- If the same service is deployed with multiple replicas, keep Redis lock enabled.
+- If the same service is deployed with multiple replicas, keep projection Redis locks aligned across replicas.

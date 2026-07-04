@@ -61,7 +61,8 @@ java "-Dsample.writer.run-once=true" `
 Başarılı çalışmada şu mesaja benzer bir çıktı görürsünüz:
 
 ```text
-cache refresh published versions=detail=<version>,segment=<version>,status=<version>,campaign=<version>,meta=<version> keys=<count>
+cache refresh published projection=detail version=<version> keys=<count>
+cache refresh published projection=campaign version=<version> keys=<count>
 ```
 
 Bu işlemden sonra `rest-sample-cache-reader` aynı Redis üzerinden müşteri profilini, segment
@@ -108,13 +109,13 @@ PostgreSQL verisini bir servis sahipleniyor ama REST pod’larının her okuma i
 
 Akış:
 
-1. `rest-sample-cache-writer`, `sample.writer.interval-ms` aralığıyla uyanır.
-2. Redis üzerinde `sample.writer.lock-name` ile lock alır.
-3. PostgreSQL’den müşteri verisini sayfa sayfa okur.
-4. Detail, segment, status, campaign ve metadata için ayrı versioned Redis snapshot’ları publish eder.
+1. `rest-sample-cache-writer`, her projection için ayrı scheduled job başlatır.
+2. Her projection kendi interval değeriyle çalışır.
+3. Her projection kendi Redis lock değerini kullanır.
+4. Lock sahibi PostgreSQL'den okur ve o projection'ı publish eder.
 5. `rest-sample-cache-reader`, bu snapshot’ı REST JSON olarak servis eder.
 
-Birden fazla replica güvenlidir. Sadece lock sahibi olan replica publish eder; lock/token/version detayını kullanıcı kodu yönetmez.
+Birden fazla replica güvenlidir. İki replica farklı projection'ları aynı anda publish edebilir. Aynı projection yine tek Redis lock ile korunur.
 
 ## Ne Üretiyor?
 
@@ -147,7 +148,7 @@ Aynı snapshot içindeki rastgele key’lere farklı TTL vermek doğru değildir
 
 ## Senaryoya Göre TTL Reçeteleri
 
-Bu örnekleri başlangıç noktası olarak kullan. Her veri TTL değeri writer interval değerinden uzun olmalıdır. TTL, refresh interval değerinden kısa olursa reader yeni publish tamamlanmadan önce süresi dolmuş projection görebilir.
+Bu örnekleri başlangıç noktası olarak kullan. Her veri TTL değeri ilgili projection'ın refresh interval değerinden uzun olmalıdır. TTL, interval değerinden kısa olursa reader yeni publish tamamlanmadan önce süresi dolmuş projection görebilir.
 
 ### Senaryo: Müşteri Profili Sabit, Kampanya Akışı Daha Taze
 
@@ -155,6 +156,11 @@ Profil ekranı yavaş değişiyor ama kampanya uygunluğu sık değişiyorsa bu 
 
 ```properties
 sample.writer.interval-ms=60000
+sample.writer.detail.interval-ms=300000
+sample.writer.segment.interval-ms=120000
+sample.writer.status.interval-ms=120000
+sample.writer.campaign.interval-ms=30000
+sample.writer.meta.interval-ms=60000
 sample.writer.cache-ttl-ms=600000
 sample.writer.detail.cache-ttl-ms=1800000
 sample.writer.segment.cache-ttl-ms=300000
@@ -179,6 +185,8 @@ java "-Dsample.writer.namespace=crm.customer.prod" `
 
 Runtime’da verilen base değer dosyadaki projection default’larının önüne geçer. Writer otomatik olarak şu namespace’leri üretir: `crm.customer.prod.detail`, `crm.customer.prod.segment`, `crm.customer.prod.status`, `crm.customer.prod.campaign` ve `crm.customer.prod.meta`.
 
+Aynı kural lock adları için de geçerlidir. `-Dsample.writer.lock-name=crm.customer.prod.refresh` verirsen writer `crm.customer.prod.refresh.detail`, `crm.customer.prod.refresh.segment` ve diğer projection lock adlarını üretir.
+
 ### Senaryo: Yoğun Trafikli Kampanya Ekranı
 
 Kampanya endpoint’i yüksek trafik alıyor ve kural değişikliklerini hızlı yansıtmak zorundaysa campaign TTL kısa tutulur. Detail TTL uzun kalır; böylece Redis’e gereksiz detay yazma baskısı oluşturulmaz.
@@ -189,6 +197,18 @@ env:
     value: "30000"
   - name: SAMPLE_WRITER_LOCK_TTL_MS
     value: "120000"
+  - name: SAMPLE_WRITER_SCHEDULER_THREADS
+    value: "2"
+  - name: SAMPLE_WRITER_DETAIL_INTERVAL_MS
+    value: "300000"
+  - name: SAMPLE_WRITER_SEGMENT_INTERVAL_MS
+    value: "120000"
+  - name: SAMPLE_WRITER_STATUS_INTERVAL_MS
+    value: "120000"
+  - name: SAMPLE_WRITER_CAMPAIGN_INTERVAL_MS
+    value: "30000"
+  - name: SAMPLE_WRITER_META_INTERVAL_MS
+    value: "60000"
   - name: SAMPLE_WRITER_DETAIL_CACHE_TTL_MS
     value: "1800000"
   - name: SAMPLE_WRITER_SEGMENT_CACHE_TTL_MS
@@ -209,6 +229,11 @@ Redis memory limiti dar ve eski read model’lerin hızlı temizlenmesi gerekiyo
 
 ```properties
 sample.writer.interval-ms=120000
+sample.writer.detail.interval-ms=300000
+sample.writer.segment.interval-ms=120000
+sample.writer.status.interval-ms=120000
+sample.writer.campaign.interval-ms=60000
+sample.writer.meta.interval-ms=120000
 sample.writer.detail.cache-ttl-ms=360000
 sample.writer.segment.cache-ttl-ms=240000
 sample.writer.status.cache-ttl-ms=240000
@@ -248,7 +273,8 @@ java "-Dsample.writer.run-once=true" `
 Beklenen çıktı:
 
 ```text
-cache refresh published versions=detail=<version>,segment=<version>,status=<version>,campaign=<version>,meta=<version> keys=<count>
+cache refresh published projection=detail version=<version> keys=<count>
+cache refresh published projection=campaign version=<version> keys=<count>
 ```
 
 ## Production Redis Topolojisi
@@ -291,17 +317,34 @@ Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-sa
 
 | Property | Default | Ne işe yarar? | Ne zaman değiştirirsin? |
 |---|---:|---|---|
-| `sample.writer.interval-ms` | `60000` | Refresh işini bu aralıkla çalıştırır. | Veri az değişiyorsa artır. DB ve Redis kaldırıyorsa düşür. |
-| `sample.writer.lock-ttl-ms` | `300000` | Aynı anda tek writer replica çalışsın diye lock tutar. | Normal refresh süresinden uzun olmalı. |
+| `sample.writer.interval-ms` | `60000` | Base refresh interval değeridir. Projection interval bunu override eder. | Ortak default olarak kullan. |
+| `sample.writer.lock-name` | `crm.customer.refresh` | Base lock adıdır. Projection lock adları bundan türetilir. | Cache domain değişiyorsa değiştir. Tüm replica'larda aynı olmalı. |
+| `sample.writer.lock-ttl-ms` | `300000` | Base lock TTL değeridir. Projection lock TTL bunu override eder. | İlgili projection refresh süresinden uzun olmalı. |
+| `sample.writer.scheduler-threads` | `2` | Lokal projection scheduler thread sayısıdır. | Küçük pod için düşük tut. Tek replica içinde paralel projection gerekiyorsa ölçerek artır. |
 | `sample.writer.cache-ttl-ms` | `600000` | Base Redis veri yaşam süresidir. | Bütün projection'lar aynı TTL kullanacaksa yeterlidir. |
+| `sample.writer.detail.interval-ms` | `300000` | Müşteri detay refresh aralığıdır. | Profil verisi stabilse artır. |
+| `sample.writer.detail.lock-name` | `crm.customer.detail.refresh` | Detail refresh Redis lock adıdır. | Sadece tüm writer replica'larla birlikte değiştir. |
+| `sample.writer.detail.lock-ttl-ms` | `300000` | Detail lock yaşam süresidir. | Detail refresh süresinden uzun tut. |
 | `sample.writer.detail.namespace` | `crm.customer.detail` | Müşteri detayı ve müşteri numarası lookup verisini tutar. | Reader ile aynı değere çekmen gerekir. |
 | `sample.writer.detail.cache-ttl-ms` | `1800000` | Müşteri detayının yaşam süresini belirler. | Profil verisi yavaş değişiyorsa artır. Daha taze veri istiyorsan düşür. |
+| `sample.writer.segment.interval-ms` | `120000` | Segment listesi refresh aralığıdır. | Segment üyeliği sık değişiyorsa düşür. |
+| `sample.writer.segment.lock-name` | `crm.customer.segment.refresh` | Segment refresh Redis lock adıdır. | Sadece tüm writer replica'larla birlikte değiştir. |
+| `sample.writer.segment.lock-ttl-ms` | `120000` | Segment lock yaşam süresidir. | Segment refresh süresinden uzun tut. |
 | `sample.writer.segment.namespace` | `crm.customer.segment` | Segment listesi verisini tutar. | Reader config ile birlikte değiştir. |
 | `sample.writer.segment.cache-ttl-ms` | `300000` | Segment listesinin yaşam süresini belirler. | Segment üyeliği sık değişiyorsa düşür. |
+| `sample.writer.status.interval-ms` | `120000` | Status listesi refresh aralığıdır. | Aktif/pasif durumu sık değişiyorsa düşür. |
+| `sample.writer.status.lock-name` | `crm.customer.status.refresh` | Status refresh Redis lock adıdır. | Sadece tüm writer replica'larla birlikte değiştir. |
+| `sample.writer.status.lock-ttl-ms` | `120000` | Status lock yaşam süresidir. | Status refresh süresinden uzun tut. |
 | `sample.writer.status.namespace` | `crm.customer.status` | Status listesi verisini tutar. | Reader config ile birlikte değiştir. |
 | `sample.writer.status.cache-ttl-ms` | `300000` | Status listesinin yaşam süresini belirler. | Aktif/pasif durumu sık değişiyorsa düşür. |
+| `sample.writer.campaign.interval-ms` | `30000` | Kampanya adayları refresh aralığıdır. | Daha taze kampanya feed'i gerekiyorsa düşür. |
+| `sample.writer.campaign.lock-name` | `crm.customer.campaign.refresh` | Campaign refresh Redis lock adıdır. | Sadece tüm writer replica'larla birlikte değiştir. |
+| `sample.writer.campaign.lock-ttl-ms` | `120000` | Campaign lock yaşam süresidir. | Campaign refresh süresinden uzun tut. |
 | `sample.writer.campaign.namespace` | `crm.customer.campaign` | Kampanya adaylarını tutar. | Reader config ile birlikte değiştir. |
 | `sample.writer.campaign.cache-ttl-ms` | `120000` | Kampanya adaylarının yaşam süresini belirler. | Kampanya kuralları sık değişiyorsa kısa tut. |
+| `sample.writer.meta.interval-ms` | `60000` | Metadata refresh aralığıdır. | Operasyonel görünürlük ihtiyacına göre ayarla. |
+| `sample.writer.meta.lock-name` | `crm.customer.meta.refresh` | Metadata refresh Redis lock adıdır. | Sadece tüm writer replica'larla birlikte değiştir. |
+| `sample.writer.meta.lock-ttl-ms` | `120000` | Metadata lock yaşam süresidir. | Metadata refresh süresinden uzun tut. |
 | `sample.writer.meta.namespace` | `crm.customer.meta` | Snapshot metadata bilgisini tutar. | Reader config ile birlikte değiştir. |
 | `sample.writer.meta.cache-ttl-ms` | `300000` | Metadata yaşam süresini belirler. | En kısa business projection TTL değerine yakın tut. |
 | `sample.writer.snapshot-batch-size` | `256` | Redis'e kaç key'in birlikte yazılacağını belirler. | Küçük pod için düşür. Refresh çok yavaşsa ölçerek artır. |
@@ -324,6 +367,7 @@ Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-sa
 | Snapshot | Bir projection'ın tamamlanmış yayınlanmış versiyonudur. |
 | Current version | Reader'ın aktif snapshot'ı bulduğu Redis pointer key'idir. |
 | Cache miss | Redis'te istenen veri yoktur. Reader kontrollü not-found response döner. |
+| Projection lock | Tek projection refresh işini koruyan Redis lock'tur. Farklı projection'lar aynı anda çalışabilir. |
 | Backpressure | Queue ve memory sınırsız büyümesin diye konan sert limittir. |
 | Sentinel | Redis high availability modudur. Primary failover yönetir. |
 | Cluster | Redis sharding modudur. Veri node'lara bölünür. |
@@ -335,4 +379,4 @@ Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-sa
 - Bu writer içine REST veya Dubbo ekleme; bu process’in işi DB’den okuyup Redis’e yazmak.
 - Read-heavy ekranlar için precomputed JSON kullan.
 - `sample.db.maximum-pool-size` değerini düşük tut. Bu bir batch writer, request-serving servis değil.
-- Aynı servis birden fazla replica ile koşacaksa Redis lock açık kalmalı.
+- Aynı servis birden fazla replica ile koşacaksa projection Redis lock adları tüm replica'larda aynı kalmalı.
