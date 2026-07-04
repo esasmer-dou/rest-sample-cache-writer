@@ -8,7 +8,29 @@ Bu uygulamanın tek işi vardır. PostgreSQL'den okur ve Redis'e yazar.
 
 REST endpoint açmaz. Dubbo kullanmaz. Java read model üretir. Redis yazma işi `java-rust-cache` ile Rust tarafında yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.2.3` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
+Bu örnek `com.reactor:java-rust-cache:0.2.4` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
+
+## Property Katmanları
+
+Varsayılan `src/main/resources/rest-sample-cache-writer.properties` minimum local dosyadır. Sadece
+DB bağlantısını, projection listesini, temel TTL/lock ayarlarını ve local Redis adresini içerir.
+
+Daha fazlası gerektiğinde overlay kullanın:
+
+```powershell
+java "-Dreactor.config.file=src/main/resources/config/production.properties" ...
+```
+
+Production ve advanced tuning dosyalarını birlikte kullanmadan önce DB wait, Redis latency ve RSS
+metriklerini ölçün:
+
+```powershell
+java "-Dreactor.config.file=src/main/resources/config/production.properties;src/main/resources/config/advanced-tuning.properties" ...
+```
+
+- `config/production.properties`: Kubernetes/production için güvenli DB, Redis ve TTL başlangıcıdır.
+- `config/advanced-tuning.properties`: projection bazlı lock, daha büyük batch ve Redis pipeline tuning içindir.
+- Environment alternatifi: `REACTOR_CONFIG_FILE=/app/config/production.properties`.
 
 ## İçindekiler
 

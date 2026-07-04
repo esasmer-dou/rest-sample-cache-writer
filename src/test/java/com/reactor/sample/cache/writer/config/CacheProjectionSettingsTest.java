@@ -24,9 +24,9 @@ class CacheProjectionSettingsTest {
     void defaultProjectionSettingsDoNotNeedSafetyAdjustment() {
         CacheWriterProjectionSettings campaign = projection("campaign");
 
-        assertEquals(30000L, campaign.intervalMillis());
-        assertEquals(120000L, campaign.configuredCacheTtlMillis());
-        assertEquals(120000L, campaign.effectiveCacheTtlMillis());
+        assertEquals(60000L, campaign.intervalMillis());
+        assertEquals(600000L, campaign.configuredCacheTtlMillis());
+        assertEquals(600000L, campaign.effectiveCacheTtlMillis());
         assertTrue(campaign.warnings().isEmpty());
     }
 
@@ -36,9 +36,9 @@ class CacheProjectionSettingsTest {
 
         CacheWriterProjectionSettings campaign = projection("campaign");
 
-        assertEquals(30000L, campaign.intervalMillis());
+        assertEquals(60000L, campaign.intervalMillis());
         assertEquals(1000L, campaign.configuredCacheTtlMillis());
-        assertEquals(60000L, campaign.effectiveCacheTtlMillis());
+        assertEquals(90000L, campaign.effectiveCacheTtlMillis());
         assertFalse(campaign.warnings().isEmpty());
         assertTrue(campaign.warnings().get(0).contains("cache-ttl-ms-must-be-greater-than-interval"));
     }
@@ -49,8 +49,8 @@ class CacheProjectionSettingsTest {
 
         CacheWriterProjectionSettings campaign = projection("campaign");
 
-        assertEquals(30000L, campaign.intervalMillis());
-        assertEquals(120000L, campaign.effectiveCacheTtlMillis());
+        assertEquals(60000L, campaign.intervalMillis());
+        assertEquals(600000L, campaign.effectiveCacheTtlMillis());
         assertFalse(campaign.warnings().isEmpty());
         assertTrue(campaign.warnings().get(0).contains("must-be-long"));
     }

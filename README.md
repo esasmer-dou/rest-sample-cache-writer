@@ -8,7 +8,28 @@ This process does one job. It reads PostgreSQL and writes Redis.
 
 It does not expose REST. It does not use Dubbo. Java builds the read model. Rust writes Redis through `java-rust-cache`.
 
-This sample uses `com.reactor:java-rust-cache:0.2.3`. The package already includes Windows and Linux native binaries.
+This sample uses `com.reactor:java-rust-cache:0.2.4`. The package already includes Windows and Linux native binaries.
+
+## Property Layers
+
+The default `src/main/resources/rest-sample-cache-writer.properties` is the minimum local file. It
+contains only the DB connection, projection list, base TTL/lock settings, and local Redis address.
+
+Use overlays when you need more:
+
+```powershell
+java "-Dreactor.config.file=src/main/resources/config/production.properties" ...
+```
+
+Use both production and advanced tuning only after measuring DB wait, Redis latency and RSS:
+
+```powershell
+java "-Dreactor.config.file=src/main/resources/config/production.properties;src/main/resources/config/advanced-tuning.properties" ...
+```
+
+- `config/production.properties`: Kubernetes/production-safe DB, Redis and TTL defaults.
+- `config/advanced-tuning.properties`: projection-specific locks, larger batches and Redis pipeline tuning.
+- Environment alternative: `REACTOR_CONFIG_FILE=/app/config/production.properties`.
 
 ## Contents
 
