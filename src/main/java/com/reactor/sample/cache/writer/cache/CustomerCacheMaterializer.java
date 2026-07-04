@@ -2,6 +2,7 @@ package com.reactor.sample.cache.writer.cache;
 
 import com.reactor.rust.cache.core.RustCache;
 import com.reactor.rust.cache.projection.CacheWriterProjectionSettings;
+import com.reactor.rust.cache.scheduler.ProjectionRefreshResult;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
 import com.reactor.sample.cache.writer.config.WriterProperties;
@@ -20,6 +21,7 @@ public final class CustomerCacheMaterializer {
 
     private final PostgresCustomerRepository repository;
     private final RustCache cache;
+    private final CustomerJsonWriter jsonWriter;
     private final Map<String, Projection> projections;
     private final Map<String, ProjectionWriter> projectionWriters;
     private final int pageSize;
@@ -38,6 +40,7 @@ public final class CustomerCacheMaterializer {
             List<CacheWriterProjectionSettings> projectionSettings) {
         this.repository = repository;
         this.cache = cache;
+        this.jsonWriter = new CustomerJsonWriter();
         int batchSize = properties.getInt("sample.writer.snapshot-batch-size");
         this.pageSize = properties.getInt("sample.writer.page-size");
         this.segmentIndexLimit = properties.getInt("sample.writer.segment-index-limit");
@@ -56,16 +59,19 @@ public final class CustomerCacheMaterializer {
         return List.copyOf(projections.keySet());
     }
 
-    public RefreshResult refreshProjection(String projectionName, String lockName, long lockTtlMillis) {
+    public ProjectionRefreshResult refreshProjection(String projectionName, String lockName, long lockTtlMillis) {
         Projection projection = projectionByName(projectionName);
         ProjectionWriter writer = projectionWriter(projectionName);
-        RefreshResult[] result = new RefreshResult[1];
+        ProjectionRefreshResult[] result = new ProjectionRefreshResult[1];
         boolean ran = cache.locks().runOnceChecked(lockName, lockTtlMillis, lock -> {
             SnapshotResult snapshot = writer.write(projection);
             lock.ensureValid();
-            result[0] = RefreshResult.publishedResult(projection.name(), snapshot.version(), snapshot.writtenKeys());
+            result[0] = ProjectionRefreshResult.published(
+                    projection.name(),
+                    snapshot.version(),
+                    snapshot.writtenKeys());
         });
-        return ran ? result[0] : RefreshResult.skippedResult(projection.name());
+        return ran ? result[0] : ProjectionRefreshResult.skipped(projection.name());
     }
 
     private Map<String, Projection> createProjections(
@@ -95,7 +101,7 @@ public final class CustomerCacheMaterializer {
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
                 repository.forEachCustomerPage(pageSize, page -> {
                     for (SampleCustomer customer : page) {
-                        byte[] detail = CustomerJsonWriter.customerDetail(customer);
+                        byte[] detail = jsonWriter.customerDetail(customer);
                         snapshot.putById(customer.id(), detail);
                         snapshot.putIndex("customer-no", customer.customerNo(), detail);
                     }
@@ -107,7 +113,7 @@ public final class CustomerCacheMaterializer {
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot -> {
             for (String segment : segments) {
                 List<SampleCustomer> customers = repository.findCustomersBySegment(segment, segmentIndexLimit);
-                snapshot.putIndex("segment", segment, CustomerJsonWriter.customerSummaries("segment", segment, customers));
+                snapshot.putIndex("segment", segment, jsonWriter.customerSummaries("segment", segment, customers));
             }
         });
     }
@@ -117,7 +123,7 @@ public final class CustomerCacheMaterializer {
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot -> {
             for (String status : statuses) {
                 List<SampleCustomer> customers = repository.findCustomersByStatus(status, statusIndexLimit);
-                snapshot.putIndex("status", status, CustomerJsonWriter.customerSummaries("status", status, customers));
+                snapshot.putIndex("status", status, jsonWriter.customerSummaries("status", status, customers));
             }
         });
     }
@@ -125,7 +131,7 @@ public final class CustomerCacheMaterializer {
     private SnapshotResult writeCampaign(Projection projection) throws Exception {
         List<SampleCustomer> activeCustomers = repository.findCustomersByStatus("active", campaignCandidateLimit);
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
-                snapshot.putIndex("campaign", "retention", CustomerJsonWriter.campaignCandidates("retention", activeCustomers)));
+                snapshot.putIndex("campaign", "retention", jsonWriter.campaignCandidates("retention", activeCustomers)));
     }
 
     private SnapshotResult writeMeta(Projection projection) throws Exception {
@@ -133,7 +139,7 @@ public final class CustomerCacheMaterializer {
         List<String> segments = repository.findSegments();
         List<String> statuses = repository.findStatuses();
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
-                snapshot.putMeta(CustomerJsonWriter.meta(counts, counts.total(), Instant.now(), segments, statuses)));
+                snapshot.putMeta(jsonWriter.meta(counts, counts.total(), Instant.now(), segments, statuses)));
     }
 
     private Projection projectionByName(String projectionName) {
@@ -165,14 +171,4 @@ public final class CustomerCacheMaterializer {
         SnapshotResult write(Projection projection) throws Exception;
     }
 
-    public record RefreshResult(String projection, boolean published, boolean skippedLocked, String version, int writtenKeys) {
-
-        static RefreshResult skippedResult(String projection) {
-            return new RefreshResult(projection, false, true, "", 0);
-        }
-
-        static RefreshResult publishedResult(String projection, String version, int writtenKeys) {
-            return new RefreshResult(projection, true, false, version, writtenKeys);
-        }
-    }
 }

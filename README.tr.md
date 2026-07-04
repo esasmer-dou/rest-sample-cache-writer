@@ -8,7 +8,7 @@ Bu uygulamanın tek işi vardır. PostgreSQL'den okur ve Redis'e yazar.
 
 REST endpoint açmaz. Dubbo kullanmaz. Java read model üretir. Redis yazma işi `java-rust-cache` ile Rust tarafında yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.2.2` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
+Bu örnek `com.reactor:java-rust-cache:0.2.3` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
 
 ## İçindekiler
 
@@ -159,6 +159,36 @@ switch (projection.name()) {
 
 BEST: config parse işini library'ye bırakın; DB sorgusunu ve JSON şeklini explicit kodda tutun.
 ANTI-PATTERN: class adlarından ne publish edileceğini tahmin eden reflection tabanlı projection magic.
+
+### Library Artık Neyi Üstleniyor?
+
+Sample artık kendi scheduler implementation sınıfını veya JSON escaping utility kodunu taşımaz.
+
+```java
+ProjectionRefreshScheduler scheduler = ProjectionRefreshScheduler.builder()
+    .settings(projectionSettings)
+    .refresher(materializer::refreshProjection)
+    .schedulerThreads(properties.getInt("sample.writer.scheduler-threads"))
+    .runOnce(properties.getBoolean("sample.writer.run-once"))
+    .threadNamePrefix("activejdbc-cache-writer")
+    .build();
+```
+
+`CustomerJsonWriter`, `JsonWriter` sınıfından miras alır. Escaping, UTF-8 dönüşümü, primitive field
+ve array helper kodu library'den gelir. Müşteri JSON şekli yine sample içinde açık kalır:
+
+```java
+public final class CustomerJsonWriter extends JsonWriter {
+    public byte[] customerDetail(SampleCustomer customer) {
+        StringBuilder json = json(768);
+        // explicit customer field'ları burada kalır
+        return utf8(json);
+    }
+}
+```
+
+`PostgresCustomerRepository`, `JdbcRepository` sınıfından miras alır. Connection, query ve lifecycle
+boilerplate library'ye gider. SQL, index ve row mapping sample uygulamada kalır.
 
 ## TTL Modeli
 

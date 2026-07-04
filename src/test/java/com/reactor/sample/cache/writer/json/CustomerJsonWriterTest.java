@@ -22,7 +22,7 @@ class CustomerJsonWriterTest {
                 Instant.parse("2026-06-28T00:00:00Z"),
                 Instant.parse("2026-06-28T00:00:00Z"));
 
-        String json = new String(CustomerJsonWriter.customer(customer), StandardCharsets.UTF_8);
+        String json = new String(new CustomerJsonWriter().customer(customer), StandardCharsets.UTF_8);
 
         assertTrue(json.contains("\"customer\""));
         assertTrue(json.contains("\"fullName\":\"Mustafa Korkmaz \\\"Pilot\\\"\""));

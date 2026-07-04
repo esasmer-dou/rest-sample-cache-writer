@@ -1,32 +1,30 @@
 package com.reactor.sample.cache.writer.json;
 
+import com.reactor.rust.cache.json.JsonWriter;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository.CustomerCounts;
 import com.reactor.sample.cache.writer.db.SampleCustomer;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 
-public final class CustomerJsonWriter {
+public final class CustomerJsonWriter extends JsonWriter {
 
-    private CustomerJsonWriter() {}
-
-    public static byte[] customer(SampleCustomer customer) {
+    public byte[] customer(SampleCustomer customer) {
         return customerDetail(customer);
     }
 
-    public static byte[] customerDetail(SampleCustomer customer) {
-        StringBuilder json = new StringBuilder(768);
+    public byte[] customerDetail(SampleCustomer customer) {
+        StringBuilder json = json(768);
         appendCustomerDetail(json, customer);
         return utf8(json);
     }
 
-    public static byte[] customers(List<SampleCustomer> customers) {
+    public byte[] customers(List<SampleCustomer> customers) {
         return customerSummaries("all", "all", customers);
     }
 
-    public static byte[] customerSummaries(String indexName, String indexValue, List<SampleCustomer> customers) {
-        StringBuilder json = new StringBuilder(Math.max(128, customers.size() * 256));
+    public byte[] customerSummaries(String indexName, String indexValue, List<SampleCustomer> customers) {
+        StringBuilder json = json(Math.max(128, customers.size() * 256));
         json.append('{');
         json.append("\"index\":{");
         stringField(json, "name", indexName).append(',');
@@ -38,8 +36,8 @@ public final class CustomerJsonWriter {
         return utf8(json);
     }
 
-    public static byte[] campaignCandidates(String campaignCode, List<SampleCustomer> customers) {
-        StringBuilder json = new StringBuilder(Math.max(160, customers.size() * 280));
+    public byte[] campaignCandidates(String campaignCode, List<SampleCustomer> customers) {
+        StringBuilder json = json(Math.max(160, customers.size() * 280));
         json.append('{');
         stringField(json, "campaignCode", campaignCode).append(',');
         json.append("\"selection\":{");
@@ -52,17 +50,17 @@ public final class CustomerJsonWriter {
         return utf8(json);
     }
 
-    public static byte[] meta(CustomerCounts counts, int versionRows, Instant generatedAt,
+    public byte[] meta(CustomerCounts counts, int versionRows, Instant generatedAt,
             List<String> segments, List<String> statuses) {
-        StringBuilder json = new StringBuilder(320);
+        StringBuilder json = json(320);
         json.append('{');
         field(json, "total", counts.total()).append(',');
         field(json, "active", counts.active()).append(',');
         field(json, "passive", counts.passive()).append(',');
         field(json, "versionRows", versionRows).append(',');
         stringField(json, "generatedAt", generatedAt.toString()).append(',');
-        appendStringArrayField(json, "segments", segments).append(',');
-        appendStringArrayField(json, "statuses", statuses).append(',');
+        stringArrayField(json, "segments", segments).append(',');
+        stringArrayField(json, "statuses", statuses).append(',');
         json.append("\"availableLookups\":[");
         quote(json, "by-id").append(',');
         quote(json, "by-customer-no").append(',');
@@ -73,11 +71,11 @@ public final class CustomerJsonWriter {
         return utf8(json);
     }
 
-    public static byte[] meta(CustomerCounts counts, int versionRows, Instant generatedAt) {
+    public byte[] meta(CustomerCounts counts, int versionRows, Instant generatedAt) {
         return meta(counts, versionRows, generatedAt, List.of(), List.of());
     }
 
-    private static void appendCustomerDetail(StringBuilder json, SampleCustomer customer) {
+    private void appendCustomerDetail(StringBuilder json, SampleCustomer customer) {
         json.append('{');
         json.append("\"customer\":{");
         field(json, "id", customer.id()).append(',');
@@ -110,7 +108,7 @@ public final class CustomerJsonWriter {
         json.append("}}");
     }
 
-    private static void appendCustomerSummaryArray(StringBuilder json, List<SampleCustomer> customers) {
+    private void appendCustomerSummaryArray(StringBuilder json, List<SampleCustomer> customers) {
         json.append('[');
         for (int i = 0; i < customers.size(); i++) {
             if (i > 0) {
@@ -121,7 +119,7 @@ public final class CustomerJsonWriter {
         json.append(']');
     }
 
-    private static void appendCustomerSummary(StringBuilder json, SampleCustomer customer) {
+    private void appendCustomerSummary(StringBuilder json, SampleCustomer customer) {
         json.append('{');
         field(json, "id", customer.id()).append(',');
         stringField(json, "customerNo", customer.customerNo()).append(',');
@@ -137,7 +135,7 @@ public final class CustomerJsonWriter {
         json.append('}');
     }
 
-    private static StringBuilder appendAddress(StringBuilder json, String type, SampleCustomer customer) {
+    private StringBuilder appendAddress(StringBuilder json, String type, SampleCustomer customer) {
         json.append('{');
         stringField(json, "type", type).append(',');
         stringField(json, "city", city(customer)).append(',');
@@ -147,7 +145,7 @@ public final class CustomerJsonWriter {
         return json;
     }
 
-    private static StringBuilder appendOrder(StringBuilder json, SampleCustomer customer, int index) {
+    private StringBuilder appendOrder(StringBuilder json, SampleCustomer customer, int index) {
         json.append('{');
         stringField(json, "orderNo", orderNo(customer, index)).append(',');
         stringField(json, "status", index == 0 ? "DELIVERED" : "PREPARING").append(',');
@@ -160,63 +158,6 @@ public final class CustomerJsonWriter {
         json.append('}');
         json.append("]}");
         return json;
-    }
-
-    private static StringBuilder appendStringArrayField(StringBuilder json, String name, List<String> values) {
-        quote(json, name).append(':').append('[');
-        for (int i = 0; i < values.size(); i++) {
-            if (i > 0) {
-                json.append(',');
-            }
-            quote(json, values.get(i));
-        }
-        json.append(']');
-        return json;
-    }
-
-    private static StringBuilder field(StringBuilder json, String name, long value) {
-        quote(json, name).append(':').append(value);
-        return json;
-    }
-
-    private static StringBuilder stringField(StringBuilder json, String name, String value) {
-        quote(json, name).append(':');
-        quote(json, value == null ? "" : value);
-        return json;
-    }
-
-    private static StringBuilder quote(StringBuilder json, String value) {
-        json.append('"');
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            switch (c) {
-                case '"' -> json.append("\\\"");
-                case '\\' -> json.append("\\\\");
-                case '\b' -> json.append("\\b");
-                case '\f' -> json.append("\\f");
-                case '\n' -> json.append("\\n");
-                case '\r' -> json.append("\\r");
-                case '\t' -> json.append("\\t");
-                default -> {
-                    if (c < 0x20) {
-                        json.append("\\u");
-                        String hex = Integer.toHexString(c);
-                        for (int pad = hex.length(); pad < 4; pad++) {
-                            json.append('0');
-                        }
-                        json.append(hex);
-                    } else {
-                        json.append(c);
-                    }
-                }
-            }
-        }
-        json.append('"');
-        return json;
-    }
-
-    private static byte[] utf8(StringBuilder json) {
-        return json.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     private static String loyaltyTier(SampleCustomer customer) {

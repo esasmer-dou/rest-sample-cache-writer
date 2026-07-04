@@ -8,7 +8,7 @@ This process does one job. It reads PostgreSQL and writes Redis.
 
 It does not expose REST. It does not use Dubbo. Java builds the read model. Rust writes Redis through `java-rust-cache`.
 
-This sample uses `com.reactor:java-rust-cache:0.2.2`. The package already includes Windows and Linux native binaries.
+This sample uses `com.reactor:java-rust-cache:0.2.3`. The package already includes Windows and Linux native binaries.
 
 ## Contents
 
@@ -161,6 +161,36 @@ switch (projection.name()) {
 
 BEST: let the library parse config and keep DB queries and JSON shape explicit. ANTI-PATTERN:
 reflection-based projection magic that guesses what to publish from class names.
+
+### What The Library Now Owns
+
+The sample no longer carries its own scheduler implementation or JSON escaping utility.
+
+```java
+ProjectionRefreshScheduler scheduler = ProjectionRefreshScheduler.builder()
+    .settings(projectionSettings)
+    .refresher(materializer::refreshProjection)
+    .schedulerThreads(properties.getInt("sample.writer.scheduler-threads"))
+    .runOnce(properties.getBoolean("sample.writer.run-once"))
+    .threadNamePrefix("activejdbc-cache-writer")
+    .build();
+```
+
+`CustomerJsonWriter` extends `JsonWriter`, so escaping, UTF-8 conversion, primitive fields, and array
+helpers come from the library. The customer JSON shape still stays in the sample:
+
+```java
+public final class CustomerJsonWriter extends JsonWriter {
+    public byte[] customerDetail(SampleCustomer customer) {
+        StringBuilder json = json(768);
+        // explicit customer fields stay here
+        return utf8(json);
+    }
+}
+```
+
+`PostgresCustomerRepository` extends `JdbcRepository`. The library owns connection/query/lifecycle
+boilerplate. The sample still owns SQL, indexes, and row mapping.
 
 ## TTL Model
 
