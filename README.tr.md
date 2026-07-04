@@ -4,13 +4,24 @@
 
 Rust-Java ekosistemi için minimum yüzeyli PostgreSQL-to-Redis cache writer örneği.
 
-Bu süreç REST endpoint açmaz ve Dubbo kullanmaz. PostgreSQL verisini ActiveJDBC + HikariCP ile okur.
-Gerçek hayata yakın nested JSON read model üretir ve Redis'e `java-rust-cache` üzerinden yazar.
-Redis I/O tarafı Rust tarafından JNI ile yapılır.
+Bu uygulamanın tek işi vardır. PostgreSQL'den okur ve Redis'e yazar.
 
-Bu örnek `com.reactor:java-rust-cache:0.2.1` ile çalışır. `java-rust-cache` paketi uyumlu
-Windows/Linux native Redis bridge binary'lerini içerir. Bu yüzden writer `rust-java-rest` olmadan ve
-manuel `java.library.path` vermeden çalışabilir.
+REST endpoint açmaz. Dubbo kullanmaz. Java read model üretir. Redis yazma işi `java-rust-cache` ile Rust tarafında yapılır.
+
+Bu örnek `com.reactor:java-rust-cache:0.2.1` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
+
+## İçindekiler
+
+1. [Kopyala-Yapıştır: Müşteri Cache Snapshot'ı Yaz](#kopyala-yapıştır-müşteri-cache-snapshotı-yaz)
+2. [Maven Package Erişimi](#maven-package-erişimi)
+3. [Gerçek Senaryo](#gerçek-senaryo)
+4. [Ne Üretiyor?](#ne-üretiyor)
+5. [TTL Modeli](#ttl-modeli)
+6. [Senaryoya Göre TTL Reçeteleri](#senaryoya-göre-ttl-reçeteleri)
+7. [Production Redis Topolojisi](#production-redis-topolojisi)
+8. [Önemli Property'ler](#önemli-propertyler)
+9. [Sözlük](#sözlük)
+10. [Production Notları](#production-notları)
 
 ## Kopyala-Yapıştır: Müşteri Cache Snapshot'ı Yaz
 
@@ -276,32 +287,46 @@ env:
 
 Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-safe çalışır: key’ler hedef node’a göre gruplanır ve redirect durumları yönetilir. Bir projection’ın aynı slot locality’ye ihtiyacı varsa key tasarımında hash tag kullan.
 
-## Önemli Property’ler
+## Önemli Property'ler
 
-| Property | Default | Ne zaman değiştirirsin? |
-|---|---:|---|
-| `sample.writer.interval-ms` | `60000` | Verinin ne sıklıkla Redis’e basılacağını belirler. Az değişen veri için artır. |
-| `sample.writer.lock-ttl-ms` | `300000` | Multiple replica’da aynı işi tek pod’un yapmasını sağlar. Normal refresh süresinden uzun olmalı. |
-| `sample.writer.cache-ttl-ms` | `600000` | Base Redis veri yaşam süresi. Runtime override verirsen projection-specific TTL ayrıca verilmediği sürece bütün projection’lara uygulanır. |
-| `sample.writer.detail.namespace` | `crm.customer.detail` | Müşteri detayı ve müşteri numarası lookup namespace’i. Reader aynı değeri kullanmalı. |
-| `sample.writer.detail.cache-ttl-ms` | `1800000` | Müşteri detay payload yaşam süresi. Profil verisi yavaş değişiyorsa artırılabilir. |
-| `sample.writer.segment.namespace` | `crm.customer.segment` | Segment listesi namespace’i. |
-| `sample.writer.segment.cache-ttl-ms` | `300000` | Segment listesi yaşam süresi. Segment üyeliği sık değişiyorsa düşür. |
-| `sample.writer.status.namespace` | `crm.customer.status` | Status listesi namespace’i. |
-| `sample.writer.status.cache-ttl-ms` | `300000` | Status listesi yaşam süresi. |
-| `sample.writer.campaign.namespace` | `crm.customer.campaign` | Kampanya adayları namespace’i. |
-| `sample.writer.campaign.cache-ttl-ms` | `120000` | Kampanya adayları yaşam süresi. Uygunluk sık değişiyorsa kısa tut. |
-| `sample.writer.meta.namespace` | `crm.customer.meta` | Metadata namespace’i. |
-| `sample.writer.meta.cache-ttl-ms` | `300000` | Metadata yaşam süresi. |
-| `sample.writer.snapshot-batch-size` | `256` | Versioned snapshot key’leri için Redis write batch boyutu. Memory-first pod’da düşür; Redis write latency düşük ama refresh yavaşsa ölçerek artır. |
-| `sample.writer.page-size` | `500` | DB’den kaç kayıtlık batch okunacağını belirler. Satırlar küçükse ve DB güçlü ise dikkatli artır. |
-| `sample.db.maximum-pool-size` | `2` | Bu process request serve etmiyor, scheduled writer. Düşük tutmak doğru. |
-| `reactor.cache.redis.write-connections` | `2` | Rust native Redis write connection sayısı. Refresh yavaşsa ölçerek artır. |
-| `reactor.cache.redis.max-write-inflight` | `4` | Redis write backpressure limiti. Memory’yi korumak için bounded kalmalı. |
-| `reactor.cache.redis.topology` | `standalone` | Production HA/sharding için `sentinel` veya `cluster` seç. |
-| `reactor.cache.redis.nodes` | empty | Sentinel node listesi veya Cluster startup node listesi. |
-| `reactor.cache.redis.sentinel.master-name` | empty | Sadece Sentinel için zorunludur. |
-| `reactor.cache.redis.sentinel.master-check-ms` | `1000` | Sentinel modunda failover sonrası master değişimini ne sıklıkla kontrol edeceğini belirler. Recovery süresi ölçümle yetmiyorsa düşür. |
+| Property | Default | Ne işe yarar? | Ne zaman değiştirirsin? |
+|---|---:|---|---|
+| `sample.writer.interval-ms` | `60000` | Refresh işini bu aralıkla çalıştırır. | Veri az değişiyorsa artır. DB ve Redis kaldırıyorsa düşür. |
+| `sample.writer.lock-ttl-ms` | `300000` | Aynı anda tek writer replica çalışsın diye lock tutar. | Normal refresh süresinden uzun olmalı. |
+| `sample.writer.cache-ttl-ms` | `600000` | Base Redis veri yaşam süresidir. | Bütün projection'lar aynı TTL kullanacaksa yeterlidir. |
+| `sample.writer.detail.namespace` | `crm.customer.detail` | Müşteri detayı ve müşteri numarası lookup verisini tutar. | Reader ile aynı değere çekmen gerekir. |
+| `sample.writer.detail.cache-ttl-ms` | `1800000` | Müşteri detayının yaşam süresini belirler. | Profil verisi yavaş değişiyorsa artır. Daha taze veri istiyorsan düşür. |
+| `sample.writer.segment.namespace` | `crm.customer.segment` | Segment listesi verisini tutar. | Reader config ile birlikte değiştir. |
+| `sample.writer.segment.cache-ttl-ms` | `300000` | Segment listesinin yaşam süresini belirler. | Segment üyeliği sık değişiyorsa düşür. |
+| `sample.writer.status.namespace` | `crm.customer.status` | Status listesi verisini tutar. | Reader config ile birlikte değiştir. |
+| `sample.writer.status.cache-ttl-ms` | `300000` | Status listesinin yaşam süresini belirler. | Aktif/pasif durumu sık değişiyorsa düşür. |
+| `sample.writer.campaign.namespace` | `crm.customer.campaign` | Kampanya adaylarını tutar. | Reader config ile birlikte değiştir. |
+| `sample.writer.campaign.cache-ttl-ms` | `120000` | Kampanya adaylarının yaşam süresini belirler. | Kampanya kuralları sık değişiyorsa kısa tut. |
+| `sample.writer.meta.namespace` | `crm.customer.meta` | Snapshot metadata bilgisini tutar. | Reader config ile birlikte değiştir. |
+| `sample.writer.meta.cache-ttl-ms` | `300000` | Metadata yaşam süresini belirler. | En kısa business projection TTL değerine yakın tut. |
+| `sample.writer.snapshot-batch-size` | `256` | Redis'e kaç key'in birlikte yazılacağını belirler. | Küçük pod için düşür. Refresh çok yavaşsa ölçerek artır. |
+| `sample.writer.page-size` | `500` | DB'den kaç satır okunacağını belirler. | Memory düşükse düşür. DB güçlü ve satırlar küçükse artır. |
+| `sample.db.maximum-pool-size` | `2` | DB connection sayısını sınırlar. | Düşük tut. Bu bir scheduled writer'dır. |
+| `reactor.cache.redis.write-connections` | `2` | Native Redis write connection açar. | Sadece Redis write latency darboğaz ise artır. |
+| `reactor.cache.redis.max-write-inflight` | `4` | Aynı anda kaç Redis write olacağını sınırlar. | Memory'yi korumak için bounded bırak. |
+| `reactor.cache.redis.topology` | `standalone` | Redis çalışma modunu seçer. | Production için `sentinel` veya `cluster` kullan. |
+| `reactor.cache.redis.nodes` | empty | Sentinel veya Cluster node listesidir. | Topology `sentinel` veya `cluster` ise doldur. |
+| `reactor.cache.redis.sentinel.master-name` | empty | Sentinel master adıdır. | Sentinel kullanıyorsan zorunludur. |
+| `reactor.cache.redis.sentinel.master-check-ms` | `1000` | Sentinel master değişimini kontrol eder. | Failover toparlanması ölçümde yavaşsa düşür. |
+
+## Sözlük
+
+| Terim | Anlamı |
+|---|---|
+| TTL | Yaşam süresi. Redis bu süre dolunca key'i siler. |
+| Projection | Bir kullanım için hazır okuma modelidir. Örnek: müşteri detayı veya kampanya adayları. |
+| Namespace | Redis key ailesinin ön ekidir. Her projection ayrı namespace kullanır. |
+| Snapshot | Bir projection'ın tamamlanmış yayınlanmış versiyonudur. |
+| Current version | Reader'ın aktif snapshot'ı bulduğu Redis pointer key'idir. |
+| Cache miss | Redis'te istenen veri yoktur. Reader kontrollü not-found response döner. |
+| Backpressure | Queue ve memory sınırsız büyümesin diye konan sert limittir. |
+| Sentinel | Redis high availability modudur. Primary failover yönetir. |
+| Cluster | Redis sharding modudur. Veri node'lara bölünür. |
 
 ## Production Notları
 

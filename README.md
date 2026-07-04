@@ -4,9 +4,24 @@
 
 Minimal PostgreSQL-to-Redis cache writer sample for the Rust-Java ecosystem.
 
-This process does not expose REST and does not use Dubbo. It reads PostgreSQL with ActiveJDBC + HikariCP, builds real-world nested JSON read models, and writes them to Redis through `java-rust-cache`, where Redis I/O is handled by Rust via JNI.
+This process does one job. It reads PostgreSQL and writes Redis.
 
-This sample is wired to `com.reactor:java-rust-cache:0.2.1`. The cache dependency includes the matching Windows/Linux native Redis bridge, so this writer can run without `rust-java-rest` and without a manual `java.library.path`.
+It does not expose REST. It does not use Dubbo. Java builds the read model. Rust writes Redis through `java-rust-cache`.
+
+This sample uses `com.reactor:java-rust-cache:0.2.1`. The package already includes Windows and Linux native binaries.
+
+## Contents
+
+1. [Copy-Paste: Publish A Customer Cache Snapshot](#copy-paste-publish-a-customer-cache-snapshot)
+2. [Maven Package Access](#maven-package-access)
+3. [Real Scenario](#real-scenario)
+4. [What It Publishes](#what-it-publishes)
+5. [TTL Model](#ttl-model)
+6. [TTL Recipes By Scenario](#ttl-recipes-by-scenario)
+7. [Production Redis Topology](#production-redis-topology)
+8. [Important Properties](#important-properties)
+9. [Glossary](#glossary)
+10. [Production Notes](#production-notes)
 
 ## Copy-Paste: Publish A Customer Cache Snapshot
 
@@ -276,30 +291,44 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 
 ## Important Properties
 
-| Property | Default | Use when |
-|---|---:|---|
-| `sample.writer.interval-ms` | `60000` | How often the writer refreshes Redis. Increase for low-change data. |
-| `sample.writer.lock-ttl-ms` | `300000` | Prevents multiple replicas from publishing at the same time. Must be longer than a normal refresh. |
-| `sample.writer.cache-ttl-ms` | `600000` | Base Redis data lifetime. Runtime override applies to all projections unless a projection-specific TTL is also set. |
-| `sample.writer.detail.namespace` | `crm.customer.detail` | Customer detail and customer-number lookup namespace. Reader must use the same value. |
-| `sample.writer.detail.cache-ttl-ms` | `1800000` | Detail payload lifetime. Raise if customer profile changes slowly. |
-| `sample.writer.segment.namespace` | `crm.customer.segment` | Segment list namespace. |
-| `sample.writer.segment.cache-ttl-ms` | `300000` | Segment list lifetime. Lower when segment membership changes often. |
-| `sample.writer.status.namespace` | `crm.customer.status` | Status list namespace. |
-| `sample.writer.status.cache-ttl-ms` | `300000` | Status list lifetime. |
-| `sample.writer.campaign.namespace` | `crm.customer.campaign` | Campaign candidate namespace. |
-| `sample.writer.campaign.cache-ttl-ms` | `120000` | Campaign candidate lifetime. Keep short when eligibility changes often. |
-| `sample.writer.meta.namespace` | `crm.customer.meta` | Metadata namespace. |
-| `sample.writer.meta.cache-ttl-ms` | `300000` | Metadata lifetime. |
-| `sample.writer.snapshot-batch-size` | `256` | Redis write batch size for versioned snapshot keys. Lower for memory-first pods; raise carefully if Redis write latency is low and refresh is too slow. |
-| `sample.writer.page-size` | `500` | DB read batch size. Increase carefully if rows are small and DB is strong. |
-| `sample.db.maximum-pool-size` | `2` | Writer is scheduled, not high-concurrency. Keep this low. |
-| `reactor.cache.redis.write-connections` | `2` | Native Redis write connections. Increase only if refresh takes too long. |
-| `reactor.cache.redis.max-write-inflight` | `4` | Backpressure for Redis writes. Keep bounded to protect memory. |
-| `reactor.cache.redis.topology` | `standalone` | Use `sentinel` or `cluster` for production HA/sharding. |
-| `reactor.cache.redis.nodes` | empty | Sentinel node list or Cluster startup node list. |
-| `reactor.cache.redis.sentinel.master-name` | empty | Required only for Sentinel. |
-| `reactor.cache.redis.sentinel.master-check-ms` | `1000` | How often Sentinel mode checks whether the master changed after failover. Lower only when recovery-time evidence needs it. |
+| Property | Default | What it does | When to change |
+|---|---:|---|---|
+| `sample.writer.interval-ms` | `60000` | Runs the refresh job on this interval. | Increase for slow-changing data. Lower only if DB and Redis can handle it. |
+| `sample.writer.lock-ttl-ms` | `300000` | Keeps only one writer replica active. | Set longer than a normal refresh duration. |
+| `sample.writer.cache-ttl-ms` | `600000` | Base Redis data lifetime. | Use when all projections can share one TTL. |
+| `sample.writer.detail.namespace` | `crm.customer.detail` | Stores customer detail and customer-number lookup. | Change with the matching reader namespace. |
+| `sample.writer.detail.cache-ttl-ms` | `1800000` | Sets customer detail lifetime. | Raise for stable profile data. Lower for stricter freshness. |
+| `sample.writer.segment.namespace` | `crm.customer.segment` | Stores segment list projections. | Change only with reader config. |
+| `sample.writer.segment.cache-ttl-ms` | `300000` | Sets segment list lifetime. | Lower when segment membership changes often. |
+| `sample.writer.status.namespace` | `crm.customer.status` | Stores status list projections. | Change only with reader config. |
+| `sample.writer.status.cache-ttl-ms` | `300000` | Sets status list lifetime. | Lower when active/passive status changes often. |
+| `sample.writer.campaign.namespace` | `crm.customer.campaign` | Stores campaign candidate projections. | Change only with reader config. |
+| `sample.writer.campaign.cache-ttl-ms` | `120000` | Sets campaign candidate lifetime. | Keep short when campaign rules change often. |
+| `sample.writer.meta.namespace` | `crm.customer.meta` | Stores snapshot metadata. | Change only with reader config. |
+| `sample.writer.meta.cache-ttl-ms` | `300000` | Sets metadata lifetime. | Keep close to the shortest business projection TTL. |
+| `sample.writer.snapshot-batch-size` | `256` | Controls Redis batch write size. | Lower for small memory pods. Raise only if refresh is too slow. |
+| `sample.writer.page-size` | `500` | Controls DB read page size. | Raise for small rows and strong DB. Lower for low memory. |
+| `sample.db.maximum-pool-size` | `2` | Caps DB connections. | Keep low. This is a scheduled writer. |
+| `reactor.cache.redis.write-connections` | `2` | Opens native Redis write connections. | Increase only when Redis write latency is the bottleneck. |
+| `reactor.cache.redis.max-write-inflight` | `4` | Bounds concurrent Redis writes. | Keep bounded to protect memory. |
+| `reactor.cache.redis.topology` | `standalone` | Selects Redis mode. | Use `sentinel` or `cluster` in production. |
+| `reactor.cache.redis.nodes` | empty | Lists Sentinel or Cluster nodes. | Set when topology is `sentinel` or `cluster`. |
+| `reactor.cache.redis.sentinel.master-name` | empty | Names the Sentinel master. | Required for Sentinel. |
+| `reactor.cache.redis.sentinel.master-check-ms` | `1000` | Checks Sentinel master changes. | Lower only if measured failover recovery is too slow. |
+
+## Glossary
+
+| Term | Meaning |
+|---|---|
+| TTL | Time to live. Redis deletes the key after this time. |
+| Projection | A ready read model for one use case, such as customer detail or campaign candidates. |
+| Namespace | Redis key prefix for one projection family. |
+| Snapshot | A complete published version of one projection. |
+| Current version | The Redis pointer that tells the reader which snapshot is active. |
+| Cache miss | Redis does not have the requested data. The reader returns a controlled not-found response. |
+| Backpressure | A hard limit that prevents queues and memory from growing without control. |
+| Sentinel | Redis high-availability mode with automatic primary failover. |
+| Cluster | Redis sharding mode. Data is split across nodes. |
 
 ## Production Notes
 
