@@ -10,7 +10,7 @@ REST endpoint açmaz. Dubbo kullanmaz. Java read model üretir. Redis yazma işi
 
 Bu örnek `com.reactor:java-rust-cache:0.2.4` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
 
-Ortak row model record'ları `com.reactor.sample:sample-model:0.1.0` paketinden gelir. Writer DB ve
+Ortak row model record'ları `com.reactor.sample:rust-sample-model:0.1.0` paketinden gelir. Writer DB ve
 projection logic'i kendi içinde tutar, ama diğer sample'larla ortak müşteri row modelini tekrar
 tanımlamaz.
 
@@ -97,7 +97,7 @@ listelerini ve kampanya adaylarını REST JSON olarak okuyabilir.
 
 ## Maven Package Erişimi
 
-Bu örnek `java-rust-cache` ve `sample-model` bağımlılıklarını GitHub Packages üzerinden çeker. Maven bu paketleri indirebilmek için kimlik bilgisi ister; bu GitHub Packages'in normal erişim modelidir.
+Bu örnek `java-rust-cache` ve `rust-sample-model` bağımlılıklarını GitHub Packages üzerinden çeker. Maven bu paketleri indirebilmek için kimlik bilgisi ister; bu GitHub Packages'in normal erişim modelidir.
 
 Maven `settings.xml` dosyana `read:packages` yetkisi olan bir GitHub token eklemelisin. Aşağıdaki `<id>` değerini aynı bırak; bu değer `pom.xml` içindeki repository id'siyle eşleşmelidir:
 
@@ -109,7 +109,7 @@ Maven `settings.xml` dosyana `read:packages` yetkisi olan bir GitHub token eklem
     <password>${env.GITHUB_PACKAGES_TOKEN}</password>
   </server>
   <server>
-    <id>github-sample-model</id>
+    <id>github-rust-sample-model</id>
     <username>YOUR_GITHUB_USERNAME</username>
     <password>${env.GITHUB_PACKAGES_TOKEN}</password>
   </server>
