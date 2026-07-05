@@ -1,0 +1,77 @@
+# syntax=docker/dockerfile:1
+
+# Build from workspace root:
+# docker build -f rest-sample-cache-writer/docker/images/Dockerfile.jlink.workspace -t rest-sample-cache-writer:jlink .
+
+FROM ibm-semeru-runtimes:open-21-jdk AS build
+
+ARG JAVA_MODULES=java.base,java.logging,java.management,java.naming,java.sql,java.transaction.xa,java.xml,jdk.charsets,jdk.crypto.ec,jdk.unsupported
+
+ENV JAVA_HOME=/opt/java/openjdk \
+    PATH=/opt/java/openjdk/bin:$PATH
+
+WORKDIR /workspace
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends binutils maven \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY java-rust-cache/pom.xml java-rust-cache/pom.xml
+COPY java-rust-cache/src java-rust-cache/src
+COPY rust-sample-model/pom.xml rust-sample-model/pom.xml
+COPY rust-sample-model/src rust-sample-model/src
+COPY rest-sample-cache-writer/pom.xml rest-sample-cache-writer/pom.xml
+COPY rest-sample-cache-writer/src rest-sample-cache-writer/src
+
+RUN mvn -q -f java-rust-cache/pom.xml -DskipTests install
+RUN mvn -q -f rust-sample-model/pom.xml -DskipTests install
+RUN mvn -q -f rest-sample-cache-writer/pom.xml -DskipTests package dependency:copy-dependencies \
+    -DincludeScope=runtime \
+    -DoutputDirectory=target/dependency
+
+RUN "$JAVA_HOME/bin/jlink" \
+    --add-modules "${JAVA_MODULES}" \
+    --strip-debug \
+    --no-header-files \
+    --no-man-pages \
+    --compress=2 \
+    --output /opt/reactor-jre
+
+FROM ubuntu:24.04 AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libstdc++6 zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app
+
+ENV JAVA_HOME=/opt/reactor-jre \
+    PATH=/opt/reactor-jre/bin:$PATH \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    SAMPLE_DB_JDBC_URL=jdbc:postgresql://postgres:5432/reactor_sample \
+    SAMPLE_DB_USERNAME=reactor \
+    SAMPLE_DB_PASSWORD=reactor \
+    SAMPLE_DB_DRIVER_CLASS_NAME=org.postgresql.Driver \
+    SAMPLE_DB_SCHEMA_INIT=true \
+    SAMPLE_WRITER_RUN_ONCE=true \
+    SAMPLE_WRITER_SCHEDULER_THREADS=2 \
+    REACTOR_CACHE_REDIS_TOPOLOGY=standalone \
+    REACTOR_CACHE_REDIS_HOST=redis \
+    REACTOR_CACHE_REDIS_PORT=6379 \
+    REACTOR_CACHE_REDIS_READ_CONNECTIONS=1 \
+    REACTOR_CACHE_REDIS_WRITE_CONNECTIONS=2 \
+    JAVA_TOOL_OPTIONS="-Xms24m -Xmx96m -Xss192k -Xgc:threads=1 -XX:ActiveProcessorCount=1 -Xtune:virtualized"
+
+WORKDIR /app
+
+RUN mkdir -p /app/.java-rust-cache/native \
+    && chown -R app:app /app
+
+COPY --from=build /opt/reactor-jre /opt/reactor-jre
+COPY --from=build /workspace/rest-sample-cache-writer/target/rest-sample-cache-writer-0.1.0.jar /app/app.jar
+COPY --from=build /workspace/rest-sample-cache-writer/target/dependency /app/lib
+
+USER app
+
+ENTRYPOINT ["java", "-cp", "/app/app.jar:/app/lib/*", "com.reactor.sample.cache.writer.app.RestSampleCacheWriterApplication"]
