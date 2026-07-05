@@ -1,6 +1,6 @@
 package com.reactor.sample.cache.writer.json;
 
-import com.reactor.sample.cache.writer.db.SampleCustomer;
+import com.reactor.sample.model.customer.SampleCustomer;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;

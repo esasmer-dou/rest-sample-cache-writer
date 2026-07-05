@@ -10,6 +10,9 @@ It does not expose REST. It does not use Dubbo. Java builds the read model. Rust
 
 This sample uses `com.reactor:java-rust-cache:0.2.4`. The package already includes Windows and Linux native binaries.
 
+Shared row model records come from `com.reactor.sample:sample-model:0.1.0`. The writer keeps DB and
+projection logic locally, but it does not duplicate the customer row model used by other samples.
+
 ## Property Layers
 
 The default `src/main/resources/rest-sample-cache-writer.properties` is the minimum local file. It
@@ -92,7 +95,7 @@ candidates from the same Redis instance.
 
 ## Maven Package Access
 
-This sample pulls `java-rust-cache` from GitHub Packages. Maven must authenticate before it can download the package; this is GitHub Packages' normal access model.
+This sample pulls `java-rust-cache` and `sample-model` from GitHub Packages. Maven must authenticate before it can download the packages; this is GitHub Packages' normal access model.
 
 Add a GitHub token with `read:packages` access to your Maven `settings.xml`. Keep the `<id>` value exactly as shown, because it must match the repository id in this project's `pom.xml`:
 
@@ -100,6 +103,11 @@ Add a GitHub token with `read:packages` access to your Maven `settings.xml`. Kee
 <servers>
   <server>
     <id>github</id>
+    <username>YOUR_GITHUB_USERNAME</username>
+    <password>${env.GITHUB_PACKAGES_TOKEN}</password>
+  </server>
+  <server>
+    <id>github-sample-model</id>
     <username>YOUR_GITHUB_USERNAME</username>
     <password>${env.GITHUB_PACKAGES_TOKEN}</password>
   </server>

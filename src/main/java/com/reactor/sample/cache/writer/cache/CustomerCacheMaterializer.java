@@ -7,9 +7,9 @@ import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
 import com.reactor.sample.cache.writer.config.WriterProperties;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
-import com.reactor.sample.cache.writer.db.PostgresCustomerRepository.CustomerCounts;
-import com.reactor.sample.cache.writer.db.SampleCustomer;
 import com.reactor.sample.cache.writer.json.CustomerJsonWriter;
+import com.reactor.sample.model.customer.CustomerCounts;
+import com.reactor.sample.model.customer.SampleCustomer;
 
 import java.time.Instant;
 import java.util.Collections;

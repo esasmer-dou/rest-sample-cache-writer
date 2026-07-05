@@ -3,6 +3,8 @@ package com.reactor.sample.cache.writer.db;
 import com.reactor.rust.cache.jdbc.HikariDataSources;
 import com.reactor.rust.cache.jdbc.JdbcRepository;
 import com.reactor.sample.cache.writer.config.WriterProperties;
+import com.reactor.sample.model.customer.CustomerCounts;
+import com.reactor.sample.model.customer.SampleCustomer;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -162,6 +164,4 @@ public final class PostgresCustomerRepository extends JdbcRepository {
         );
     }
 
-    public record CustomerCounts(int total, int active, int passive) {
-    }
 }

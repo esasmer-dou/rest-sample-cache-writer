@@ -1,8 +1,8 @@
 package com.reactor.sample.cache.writer.json;
 
 import com.reactor.rust.cache.json.JsonWriter;
-import com.reactor.sample.cache.writer.db.PostgresCustomerRepository.CustomerCounts;
-import com.reactor.sample.cache.writer.db.SampleCustomer;
+import com.reactor.sample.model.customer.CustomerCounts;
+import com.reactor.sample.model.customer.SampleCustomer;
 
 import java.time.Instant;
 import java.util.List;
