@@ -1,6 +1,6 @@
 # rest-sample-cache-writer
 
-[English](README.md) | [Turkish](README.tr.md)
+[English](https://github.com/esasmer-dou/rest-sample-cache-writer/blob/master/README.md) | [Turkish](https://github.com/esasmer-dou/rest-sample-cache-writer/blob/master/README.tr.md)
 
 Minimal PostgreSQL-to-Redis cache writer sample for the Rust-Java ecosystem.
 
