@@ -2,7 +2,7 @@
 
 [English](https://github.com/esasmer-dou/rest-sample-cache-writer/blob/master/README.md) | [Turkish](https://github.com/esasmer-dou/rest-sample-cache-writer/blob/master/README.tr.md)
 
-[Kısa Kullanıcı Rehberi](docs/USER_GUIDE.tr.md) | [PDF](docs/USER_GUIDE.tr.pdf)
+[Kısa Kullanıcı Rehberi](docs/USER_GUIDE.tr.md) | [PDF](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 
 Rust-Java ekosistemi için minimum yüzeyli PostgreSQL-to-Redis cache writer örneği.
 
