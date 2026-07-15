@@ -8,7 +8,7 @@ This process does one job. It reads PostgreSQL and writes Redis.
 
 It does not expose REST. It does not use Dubbo. Java builds the read model. Rust writes Redis through `java-rust-cache`.
 
-This sample uses `com.reactor:java-rust-cache:0.2.4`. The package already includes Windows and Linux native binaries.
+This sample uses `com.reactor:java-rust-cache:0.3.1`. The package already includes Windows and Linux native binaries.
 
 Shared row model records come from `com.reactor.sample:rust-sample-model:0.1.0`. The writer keeps DB and
 projection logic locally, but it does not duplicate the customer row model used by other samples.
@@ -196,24 +196,18 @@ reflection-based projection magic that guesses what to publish from class names.
 The sample no longer carries its own scheduler implementation or JSON escaping utility.
 
 ```java
-CacheProperties properties = CacheProperties.load("rest-sample-cache-writer.properties");
-
-ProjectionWriterApplication.from(properties, "sample.writer")
-    .threadNamePrefix("jdbc-cache-writer")
-    .module(context -> {
-        PostgresCustomerRepository repository = context.manage(
-                PostgresCustomerRepository.fromProperties(properties));
-        RustCache cache = context.manage(RustCaches.create(properties.asProperties()));
-        CustomerCacheMaterializer materializer =
-                new CustomerCacheMaterializer(repository, cache, properties);
-        context.refresher(materializer::refreshProjection);
-    })
-    .run();
+public static void main(String[] args) {
+    ProjectionWriterApplication.run(
+            "rest-sample-cache-writer.properties",
+            "sample.writer",
+            CacheWriterModule.INSTANCE);
+}
 ```
 
 `ProjectionWriterApplication` reads the projection schedule, owns bounded scheduler threads, installs
 the shutdown hook, and closes managed resources in reverse order. Startup failure also closes every
-resource already created.
+resource already created. `CacheWriterModule` keeps repository, Redis client, and materializer wiring
+explicit without putting lifecycle plumbing in `main`.
 
 `CustomerJsonWriter` extends `SampleJsonWriter`, so escaping, UTF-8 conversion, primitive fields, and array
 helpers come from the library. The customer JSON shape still stays in the sample:
@@ -448,6 +442,10 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 | `sample.writer.lock-name` | `crm.customer.refresh` | Base lock name. Projection locks are derived from it unless explicitly set. | Change per cache domain. Keep all replicas aligned. |
 | `sample.writer.lock-ttl-ms` | `300000` | Base lock TTL. Projection lock TTL overrides it. | Set longer than that projection's normal refresh duration. |
 | `sample.writer.scheduler-threads` | `2` | Number of local projection scheduler threads. | Keep low for small pods. Raise only if one writer replica must run projections in parallel. |
+| `sample.writer.scheduler-thread-stack-bytes` | `262144` | Native stack budget for each scheduler thread. | Lower only after stack-depth tests; raise if real workloads show stack errors. |
+| `sample.writer.first-run-timeout-ms` | `60000` | Maximum wait for the first run in run-once mode. | Raise when one valid DB snapshot can take longer. |
+| `sample.writer.thread-name-prefix` | `jdbc-cache-writer` | Prefix used for scheduler thread names. | Change for log and thread-dump clarity only. |
+| `sample.writer.shutdown-thread-name` | `cache-writer-shutdown` | Name of the shutdown hook thread. | Change for operational naming only. |
 | `sample.writer.projections` | `detail,segment,status,campaign,meta` | Selects active projection jobs. | Narrow it when this writer should publish only selected read models. |
 | `sample.writer.cache-ttl-ms` | `600000` | Base Redis data lifetime. | Use when all projections can share one TTL. |
 | `sample.writer.cache-ttl-safety-margin-ms` | `30000` | Safety margin added above interval when a TTL is misconfigured too short. | Usually leave unchanged. Lower only with measured low-risk short-interval projections. |

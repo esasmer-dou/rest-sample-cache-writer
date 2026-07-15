@@ -10,7 +10,7 @@ Bu uygulamanın tek işi vardır. PostgreSQL'den okur ve Redis'e yazar.
 
 REST endpoint açmaz. Dubbo kullanmaz. Java read model üretir. Redis yazma işi `java-rust-cache` ile Rust tarafında yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.2.4` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
+Bu örnek `com.reactor:java-rust-cache:0.3.1` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
 
 Ortak row model record'ları `com.reactor.sample:rust-sample-model:0.1.0` paketinden gelir. Writer DB ve
 projection logic'i kendi içinde tutar, ama diğer sample'larla ortak müşteri row modelini tekrar
@@ -198,24 +198,18 @@ ANTI-PATTERN: class adlarından ne publish edileceğini tahmin eden reflection t
 Sample artık kendi scheduler implementation sınıfını veya JSON escaping utility kodunu taşımaz.
 
 ```java
-CacheProperties properties = CacheProperties.load("rest-sample-cache-writer.properties");
-
-ProjectionWriterApplication.from(properties, "sample.writer")
-    .threadNamePrefix("jdbc-cache-writer")
-    .module(context -> {
-        PostgresCustomerRepository repository = context.manage(
-                PostgresCustomerRepository.fromProperties(properties));
-        RustCache cache = context.manage(RustCaches.create(properties.asProperties()));
-        CustomerCacheMaterializer materializer =
-                new CustomerCacheMaterializer(repository, cache, properties);
-        context.refresher(materializer::refreshProjection);
-    })
-    .run();
+public static void main(String[] args) {
+    ProjectionWriterApplication.run(
+            "rest-sample-cache-writer.properties",
+            "sample.writer",
+            CacheWriterModule.INSTANCE);
+}
 ```
 
 `ProjectionWriterApplication`; projection takvimini okur, sınırlı scheduler thread'lerini yönetir,
 shutdown hook ekler ve kaynakları ters sırada kapatır. Başlangıç sırasında hata oluşursa o ana kadar
-açılmış kaynaklar da kapatılır.
+açılmış kaynaklar da kapatılır. `CacheWriterModule`; repository, Redis client ve materializer
+bağlantılarını açık tutar. Lifecycle ayrıntıları `main` metoduna taşınmaz.
 
 `CustomerJsonWriter`, `SampleJsonWriter` sınıfından miras alır. Escaping, UTF-8 dönüşümü, primitive field
 ve array helper kodu library'den gelir. Müşteri JSON şekli yine sample içinde açık kalır:
@@ -450,6 +444,10 @@ Cluster’da `reactor.cache.redis.database=0` kalmalıdır. `setMany` cluster-sa
 | `sample.writer.lock-name` | `crm.customer.refresh` | Base lock adıdır. Projection lock adları bundan türetilir. | Cache domain değişiyorsa değiştir. Tüm replica'larda aynı olmalı. |
 | `sample.writer.lock-ttl-ms` | `300000` | Base lock TTL değeridir. Projection lock TTL bunu override eder. | İlgili projection refresh süresinden uzun olmalı. |
 | `sample.writer.scheduler-threads` | `2` | Lokal projection scheduler thread sayısıdır. | Küçük pod için düşük tut. Tek replica içinde paralel projection gerekiyorsa ölçerek artır. |
+| `sample.writer.scheduler-thread-stack-bytes` | `262144` | Her scheduler thread için native stack bütçesidir. | Stack derinliği testi yapmadan düşürme. Gerçek stack hatası görülürse artır. |
+| `sample.writer.first-run-timeout-ms` | `60000` | Run-once modunda ilk çalışmanın tamamlanmasını bekleme süresidir. | Geçerli bir DB snapshot daha uzun sürüyorsa artır. |
+| `sample.writer.thread-name-prefix` | `jdbc-cache-writer` | Scheduler thread adlarının ön ekidir. | Yalnızca log ve thread dump okunabilirliği için değiştir. |
+| `sample.writer.shutdown-thread-name` | `cache-writer-shutdown` | Shutdown hook thread adıdır. | Yalnızca operasyonel isimlendirme için değiştir. |
 | `sample.writer.projections` | `detail,segment,status,campaign,meta` | Çalışacak projection listesini belirler. | Sadece gerekli read model'leri publish etmek istiyorsan daralt. |
 | `sample.writer.cache-ttl-ms` | `600000` | Base Redis veri yaşam süresidir. | Bütün projection'lar aynı TTL kullanacaksa yeterlidir. |
 | `sample.writer.cache-ttl-safety-margin-ms` | `30000` | Hatalı kısa TTL görüldüğünde interval üstüne eklenecek güvenlik marjıdır. | Normalde değiştirme. Çok kısa interval kullanan düşük riskli projection'larda ölçerek düşür. |
