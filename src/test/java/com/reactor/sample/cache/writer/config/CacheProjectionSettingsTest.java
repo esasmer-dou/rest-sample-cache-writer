@@ -1,5 +1,6 @@
 package com.reactor.sample.cache.writer.config;
 
+import com.reactor.rust.cache.config.CacheProperties;
 import com.reactor.rust.cache.projection.CacheWriterProjectionSettings;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -60,7 +61,7 @@ class CacheProjectionSettingsTest {
         System.setProperty("sample.writer.projections", "detail,campaign,detail");
 
         List<CacheWriterProjectionSettings> settings =
-                CacheWriterProjectionSettings.resolveAll(WriterProperties.load(), "sample.writer");
+                CacheWriterProjectionSettings.resolveAll(properties(), "sample.writer");
 
         assertEquals(2, settings.size());
         assertEquals("detail", settings.get(0).name());
@@ -69,10 +70,14 @@ class CacheProjectionSettingsTest {
 
     private static CacheWriterProjectionSettings projection(String name) {
         List<CacheWriterProjectionSettings> settings =
-                CacheWriterProjectionSettings.resolveAll(WriterProperties.load(), "sample.writer");
+                CacheWriterProjectionSettings.resolveAll(properties(), "sample.writer");
         return settings.stream()
                 .filter(setting -> setting.name().equals(name))
                 .findFirst()
                 .orElseThrow();
+    }
+
+    private static CacheProperties properties() {
+        return CacheProperties.load("rest-sample-cache-writer.properties");
     }
 }

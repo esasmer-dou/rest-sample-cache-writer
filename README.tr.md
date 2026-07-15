@@ -198,20 +198,30 @@ ANTI-PATTERN: class adlarından ne publish edileceğini tahmin eden reflection t
 Sample artık kendi scheduler implementation sınıfını veya JSON escaping utility kodunu taşımaz.
 
 ```java
-ProjectionRefreshScheduler scheduler = ProjectionRefreshScheduler.builder()
-    .settings(projectionSettings)
-    .refresher(materializer::refreshProjection)
-    .schedulerThreads(properties.getInt("sample.writer.scheduler-threads"))
-    .runOnce(properties.getBoolean("sample.writer.run-once"))
-    .threadNamePrefix("activejdbc-cache-writer")
-    .build();
+CacheProperties properties = CacheProperties.load("rest-sample-cache-writer.properties");
+
+ProjectionWriterApplication.from(properties, "sample.writer")
+    .threadNamePrefix("jdbc-cache-writer")
+    .module(context -> {
+        PostgresCustomerRepository repository = context.manage(
+                PostgresCustomerRepository.fromProperties(properties));
+        RustCache cache = context.manage(RustCaches.create(properties.asProperties()));
+        CustomerCacheMaterializer materializer =
+                new CustomerCacheMaterializer(repository, cache, properties);
+        context.refresher(materializer::refreshProjection);
+    })
+    .run();
 ```
 
-`CustomerJsonWriter`, `JsonWriter` sınıfından miras alır. Escaping, UTF-8 dönüşümü, primitive field
+`ProjectionWriterApplication`; projection takvimini okur, sınırlı scheduler thread'lerini yönetir,
+shutdown hook ekler ve kaynakları ters sırada kapatır. Başlangıç sırasında hata oluşursa o ana kadar
+açılmış kaynaklar da kapatılır.
+
+`CustomerJsonWriter`, `SampleJsonWriter` sınıfından miras alır. Escaping, UTF-8 dönüşümü, primitive field
 ve array helper kodu library'den gelir. Müşteri JSON şekli yine sample içinde açık kalır:
 
 ```java
-public final class CustomerJsonWriter extends JsonWriter {
+public final class CustomerJsonWriter extends SampleJsonWriter {
     public byte[] customerDetail(SampleCustomer customer) {
         StringBuilder json = json(768);
         // explicit customer field'ları burada kalır

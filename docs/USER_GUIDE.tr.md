@@ -74,13 +74,13 @@ Sonra writer'ı çalıştırın:
 
 ```powershell
 mvn -q package
-java -jar target/rest-sample-cache-writer-0.1.0.jar
+java -jar target/rest-sample-cache-writer-0.2.0.jar
 ```
 
 Tek seferlik snapshot için:
 
 ```powershell
-java "-Dsample.writer.run-once=true" -jar target/rest-sample-cache-writer-0.1.0.jar
+java "-Dsample.writer.run-once=true" -jar target/rest-sample-cache-writer-0.2.0.jar
 ```
 
 ## Kopyala-Yapıştır Örnekler
@@ -90,7 +90,7 @@ Sadece tek seferlik snapshot üret:
 ```powershell
 java "-Dsample.writer.run-once=true" `
   "-Dsample.writer.projections=detail,segment,meta" `
-  -jar target/rest-sample-cache-writer-0.1.0.jar
+  -jar target/rest-sample-cache-writer-0.2.0.jar
 ```
 
 Kampanya projection'ını daha sık yenile:

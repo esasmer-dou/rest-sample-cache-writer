@@ -1,13 +1,13 @@
 package com.reactor.sample.cache.writer.json;
 
-import com.reactor.rust.cache.json.JsonWriter;
 import com.reactor.sample.model.customer.CustomerCounts;
 import com.reactor.sample.model.customer.SampleCustomer;
+import com.reactor.sample.utility.json.SampleJsonWriter;
 
 import java.time.Instant;
 import java.util.List;
 
-public final class CustomerJsonWriter extends JsonWriter {
+public final class CustomerJsonWriter extends SampleJsonWriter {
 
     public byte[] customer(SampleCustomer customer) {
         return customerDetail(customer);

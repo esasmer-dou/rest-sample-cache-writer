@@ -2,7 +2,7 @@ package com.reactor.sample.cache.writer.db;
 
 import com.reactor.rust.cache.jdbc.HikariDataSources;
 import com.reactor.rust.cache.jdbc.JdbcRepository;
-import com.reactor.sample.cache.writer.config.WriterProperties;
+import com.reactor.rust.cache.config.CacheProperties;
 import com.reactor.sample.model.customer.CustomerCounts;
 import com.reactor.sample.model.customer.SampleCustomer;
 
@@ -55,13 +55,13 @@ public final class PostgresCustomerRepository extends JdbcRepository {
             from sample_customers
             """;
 
-    private PostgresCustomerRepository(WriterProperties properties) {
+    private PostgresCustomerRepository(CacheProperties properties) {
         super(
                 HikariDataSources.create(properties.asProperties(), "sample.db"),
                 properties.getBoolean("sample.db.schema-init"));
     }
 
-    public static PostgresCustomerRepository fromProperties(WriterProperties properties) {
+    public static PostgresCustomerRepository fromProperties(CacheProperties properties) {
         return new PostgresCustomerRepository(properties);
     }
 

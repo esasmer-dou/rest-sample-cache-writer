@@ -196,20 +196,30 @@ reflection-based projection magic that guesses what to publish from class names.
 The sample no longer carries its own scheduler implementation or JSON escaping utility.
 
 ```java
-ProjectionRefreshScheduler scheduler = ProjectionRefreshScheduler.builder()
-    .settings(projectionSettings)
-    .refresher(materializer::refreshProjection)
-    .schedulerThreads(properties.getInt("sample.writer.scheduler-threads"))
-    .runOnce(properties.getBoolean("sample.writer.run-once"))
-    .threadNamePrefix("activejdbc-cache-writer")
-    .build();
+CacheProperties properties = CacheProperties.load("rest-sample-cache-writer.properties");
+
+ProjectionWriterApplication.from(properties, "sample.writer")
+    .threadNamePrefix("jdbc-cache-writer")
+    .module(context -> {
+        PostgresCustomerRepository repository = context.manage(
+                PostgresCustomerRepository.fromProperties(properties));
+        RustCache cache = context.manage(RustCaches.create(properties.asProperties()));
+        CustomerCacheMaterializer materializer =
+                new CustomerCacheMaterializer(repository, cache, properties);
+        context.refresher(materializer::refreshProjection);
+    })
+    .run();
 ```
 
-`CustomerJsonWriter` extends `JsonWriter`, so escaping, UTF-8 conversion, primitive fields, and array
+`ProjectionWriterApplication` reads the projection schedule, owns bounded scheduler threads, installs
+the shutdown hook, and closes managed resources in reverse order. Startup failure also closes every
+resource already created.
+
+`CustomerJsonWriter` extends `SampleJsonWriter`, so escaping, UTF-8 conversion, primitive fields, and array
 helpers come from the library. The customer JSON shape still stays in the sample:
 
 ```java
-public final class CustomerJsonWriter extends JsonWriter {
+public final class CustomerJsonWriter extends SampleJsonWriter {
     public byte[] customerDetail(SampleCustomer customer) {
         StringBuilder json = json(768);
         // explicit customer fields stay here
