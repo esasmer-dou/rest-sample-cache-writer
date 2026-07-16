@@ -6,7 +6,7 @@
 
     <groupId>com.reactor.sample</groupId>
     <artifactId>rest-sample-cache-writer</artifactId>
-    <version>0.2.1</version>
+    <version>0.3.0</version>
     <packaging>jar</packaging>
 
     <name>rest-sample-cache-writer</name>
@@ -15,7 +15,7 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java-rust-cache.version>0.3.1</java-rust-cache.version>
+        <java-rust-cache.version>0.4.0</java-rust-cache.version>
         <rust-sample-model.version>0.2.0</rust-sample-model.version>
         <rest-sample-utility.version>0.2.0</rest-sample-utility.version>
         <postgresql.version>42.7.3</postgresql.version>

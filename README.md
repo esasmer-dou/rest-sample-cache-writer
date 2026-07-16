@@ -8,9 +8,12 @@ This process does one job. It reads PostgreSQL and writes Redis.
 
 It does not expose REST. It does not use Dubbo. Java builds the read model. Rust writes Redis through `java-rust-cache`.
 
-This sample uses `com.reactor:java-rust-cache:0.3.1`. The package already includes Windows and Linux native binaries.
+This sample uses `com.reactor:java-rust-cache:0.4.0`. The package already includes Windows and Linux native binaries.
+Its Redis client is explicitly `write-only`, so read pools and read permits are not allocated.
 
-Shared row model records come from `com.reactor.sample:rust-sample-model:0.1.0`. The writer keeps DB and
+[Release notes for v0.3.0](docs/RELEASE_NOTES_v0.3.0.md)
+
+Shared row model records come from `com.reactor.sample:rust-sample-model:0.2.0`. The writer keeps DB and
 projection logic locally, but it does not duplicate the customer row model used by other samples.
 
 ## Property Layers
@@ -406,6 +409,8 @@ Use Sentinel when Redis has one writable primary and Sentinel owns failover:
 
 ```yaml
 env:
+  - name: REACTOR_CACHE_REDIS_ACCESS_MODE
+    value: "write-only"
   - name: REACTOR_CACHE_REDIS_TOPOLOGY
     value: "sentinel"
   - name: REACTOR_CACHE_REDIS_NODES
@@ -478,6 +483,7 @@ For Cluster, keep `reactor.cache.redis.database=0`. `setMany` is cluster-safe: k
 | `sample.writer.page-size` | `500` | Controls DB read page size. | Raise for small rows and strong DB. Lower for low memory. |
 | `sample.db.maximum-pool-size` | `2` | Caps DB connections. | Keep low. This is a scheduled writer. |
 | `reactor.cache.redis.write-connections` | `2` | Opens native Redis write connections. | Increase only when Redis write latency is the bottleneck. |
+| `reactor.cache.redis.access-mode` | `write-only` | Creates only the native write plane and rejects reads before JNI. | Keep it `write-only` in this scheduled writer. Use `read-write` only if the process must read cache data. |
 | `reactor.cache.redis.max-write-inflight` | `4` | Bounds concurrent Redis writes. | Keep bounded to protect memory. |
 | `reactor.cache.redis.topology` | `standalone` | Selects Redis mode. | Use `sentinel` or `cluster` in production. |
 | `reactor.cache.redis.nodes` | empty | Lists Sentinel or Cluster nodes. | Set when topology is `sentinel` or `cluster`. |
