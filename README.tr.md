@@ -10,10 +10,10 @@ Bu uygulamanın tek işi vardır. PostgreSQL'den okur ve Redis'e yazar.
 
 REST endpoint açmaz. Dubbo kullanmaz. Java read model üretir. Redis yazma işi `java-rust-cache` ile Rust tarafında yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.4.0` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
+Bu örnek `com.reactor:java-rust-cache:0.4.1` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
 Redis client açıkça `write-only` çalışır. Bu nedenle read pool ve read permit kaynakları açılmaz.
 
-[v0.3.0 sürüm notları](docs/RELEASE_NOTES_v0.3.0.md)
+[v0.3.1 sürüm notları](docs/RELEASE_NOTES_v0.3.1.md)
 
 Ortak row model record'ları `com.reactor.sample:rust-sample-model:0.2.0` paketinden gelir. Writer DB ve
 projection logic'i kendi içinde tutar, ama diğer sample'larla ortak müşteri row modelini tekrar

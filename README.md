@@ -8,10 +8,10 @@ This process does one job. It reads PostgreSQL and writes Redis.
 
 It does not expose REST. It does not use Dubbo. Java builds the read model. Rust writes Redis through `java-rust-cache`.
 
-This sample uses `com.reactor:java-rust-cache:0.4.0`. The package already includes Windows and Linux native binaries.
+This sample uses `com.reactor:java-rust-cache:0.4.1`. The package already includes Windows and Linux native binaries.
 Its Redis client is explicitly `write-only`, so read pools and read permits are not allocated.
 
-[Release notes for v0.3.0](docs/RELEASE_NOTES_v0.3.0.md)
+[Release notes for v0.3.1](docs/RELEASE_NOTES_v0.3.1.md)
 
 Shared row model records come from `com.reactor.sample:rust-sample-model:0.2.0`. The writer keeps DB and
 projection logic locally, but it does not duplicate the customer row model used by other samples.
