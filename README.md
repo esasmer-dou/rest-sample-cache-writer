@@ -8,13 +8,38 @@ This process does one job. It reads PostgreSQL and writes Redis.
 
 It does not expose REST. It does not use Dubbo. Java builds the read model. Rust writes Redis through `java-rust-cache`.
 
-This sample uses `com.reactor:java-rust-cache:0.4.1`. The package already includes Windows and Linux native binaries.
+This sample uses `com.reactor:java-rust-cache:0.5.0`. The package already includes Windows and Linux native binaries.
 Its Redis client is explicitly `write-only`, so read pools and read permits are not allocated.
 
-[Release notes for v0.3.1](docs/RELEASE_NOTES_v0.3.1.md)
+[Release notes for v0.4.0](docs/RELEASE_NOTES_v0.4.0.md)
 
-Shared row model records come from `com.reactor.sample:rust-sample-model:0.2.0`. The writer keeps DB and
+Shared row model records come from `com.reactor.sample:rust-sample-model:0.3.0`. The writer keeps DB and
 projection logic locally, but it does not duplicate the customer row model used by other samples.
+
+The sample also removes repeated registry and JDBC mapping code at build time:
+
+- `CustomerProjection` is the shared reader/writer projection vocabulary.
+- `@GenerateProjectionRegistry(CustomerProjection.class)` creates direct projection-to-method wiring.
+- `@GenerateJdbcMapper` on the shared records creates `SampleCustomerJdbcMapper` and
+  `CustomerCountsJdbcMapper`.
+- Generated classes contain direct calls. They do not use runtime reflection.
+
+```java
+@GenerateProjectionRegistry(CustomerProjection.class)
+public final class CustomerCacheMaterializer {
+    CustomerCacheMaterializer(RustCache cache,
+                              List<CacheWriterProjectionSettings> settings,
+                              int batchSize) {
+        projections = CustomerCacheMaterializerProjectionRegistry.create(
+                this, cache, settings, batchSize);
+    }
+
+    SnapshotResult writeDetail(ProjectionTarget target) { /* query and publish */ }
+    SnapshotResult writeCampaign(ProjectionTarget target) { /* query and publish */ }
+}
+```
+
+Keep SQL and JSON business shape explicit. Generate only mechanical mapping and registry code.
 
 ## Property Layers
 
@@ -200,23 +225,23 @@ The sample no longer carries its own scheduler implementation or JSON escaping u
 
 ```java
 public static void main(String[] args) {
-    ProjectionWriterApplication.run(
+    ProjectionWriterApplication.runCache(
             "rest-sample-cache-writer.properties",
             "sample.writer",
-            CacheWriterModule.INSTANCE);
+            CustomerCacheMaterializer::create);
 }
 ```
 
 `ProjectionWriterApplication` reads the projection schedule, owns bounded scheduler threads, installs
 the shutdown hook, and closes managed resources in reverse order. Startup failure also closes every
-resource already created. `CacheWriterModule` keeps repository, Redis client, and materializer wiring
-explicit without putting lifecycle plumbing in `main`.
+resource already created. `runCache(...)` creates and owns the Redis client. The materializer factory
+only creates the repository and the explicit business projection writers.
 
-`CustomerJsonWriter` extends `SampleJsonWriter`, so escaping, UTF-8 conversion, primitive fields, and array
+`CustomerJsonWriter` extends `JsonWriter`, so escaping, UTF-8 conversion, primitive fields, and array
 helpers come from the library. The customer JSON shape still stays in the sample:
 
 ```java
-public final class CustomerJsonWriter extends SampleJsonWriter {
+public final class CustomerJsonWriter extends JsonWriter {
     public byte[] customerDetail(SampleCustomer customer) {
         StringBuilder json = json(768);
         // explicit customer fields stay here

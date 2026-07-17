@@ -6,7 +6,7 @@
 
     <groupId>com.reactor.sample</groupId>
     <artifactId>rest-sample-cache-writer</artifactId>
-    <version>0.3.1</version>
+    <version>0.4.0</version>
     <packaging>jar</packaging>
 
     <name>rest-sample-cache-writer</name>
@@ -15,9 +15,8 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <java-rust-cache.version>0.4.1</java-rust-cache.version>
-        <rust-sample-model.version>0.2.0</rust-sample-model.version>
-        <rest-sample-utility.version>0.2.0</rest-sample-utility.version>
+        <java-rust-cache.version>0.5.0</java-rust-cache.version>
+        <rust-sample-model.version>0.3.0</rust-sample-model.version>
         <postgresql.version>42.7.3</postgresql.version>
         <hikaricp.version>5.1.0</hikaricp.version>
         <slf4j.version>1.7.35</slf4j.version>
@@ -31,14 +30,16 @@
             <version>${rust-sample-model.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.reactor.sample</groupId>
-            <artifactId>rest-sample-utility</artifactId>
-            <version>${rest-sample-utility.version}</version>
+            <groupId>com.reactor</groupId>
+            <artifactId>java-rust-cache</artifactId>
+            <version>${java-rust-cache.version}</version>
         </dependency>
         <dependency>
             <groupId>com.reactor</groupId>
             <artifactId>java-rust-cache</artifactId>
             <version>${java-rust-cache.version}</version>
+            <classifier>codegen</classifier>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -73,10 +74,6 @@
             <id>github-rust-sample-model</id>
             <url>https://maven.pkg.github.com/esasmer-dou/rust-sample-model</url>
         </repository>
-        <repository>
-            <id>github-rest-sample-utility</id>
-            <url>https://maven.pkg.github.com/esasmer-dou/rest-sample-utility</url>
-        </repository>
     </repositories>
 
     <build>
@@ -87,6 +84,17 @@
                 <version>3.13.0</version>
                 <configuration>
                     <release>${maven.compiler.release}</release>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.reactor</groupId>
+                            <artifactId>java-rust-cache</artifactId>
+                            <version>${java-rust-cache.version}</version>
+                            <classifier>codegen</classifier>
+                        </path>
+                    </annotationProcessorPaths>
+                    <annotationProcessors>
+                        <annotationProcessor>com.reactor.rust.cache.codegen.ProjectionRegistryProcessor</annotationProcessor>
+                    </annotationProcessors>
                 </configuration>
             </plugin>
             <plugin>

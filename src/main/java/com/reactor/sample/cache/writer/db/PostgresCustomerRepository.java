@@ -4,10 +4,11 @@ import com.reactor.rust.cache.jdbc.HikariDataSources;
 import com.reactor.rust.cache.jdbc.JdbcRepository;
 import com.reactor.rust.cache.config.CacheProperties;
 import com.reactor.sample.model.customer.CustomerCounts;
+import com.reactor.sample.model.customer.CustomerCountsJdbcMapper;
 import com.reactor.sample.model.customer.SampleCustomer;
+import com.reactor.sample.model.customer.SampleCustomerJdbcMapper;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.List;
 import java.util.function.Consumer;
@@ -84,7 +85,7 @@ public final class PostgresCustomerRepository extends JdbcRepository {
         return query("Find customers by segment", SELECT_CUSTOMERS_BY_SEGMENT, statement -> {
             statement.setString(1, segment);
             statement.setInt(2, boundedLimit);
-        }, PostgresCustomerRepository::toCustomer);
+        }, SampleCustomerJdbcMapper::map);
     }
 
     public List<String> findStatuses() {
@@ -96,7 +97,7 @@ public final class PostgresCustomerRepository extends JdbcRepository {
         return query("Find customers by status", SELECT_CUSTOMERS_BY_STATUS, statement -> {
             statement.setString(1, status);
             statement.setInt(2, boundedLimit);
-        }, PostgresCustomerRepository::toCustomer);
+        }, SampleCustomerJdbcMapper::map);
     }
 
     public CustomerCounts countCustomersByStatus() {
@@ -104,7 +105,7 @@ public final class PostgresCustomerRepository extends JdbcRepository {
                 "Count customers",
                 SELECT_CUSTOMER_COUNTS,
                 SqlBinder.none(),
-                row -> new CustomerCounts(row.getInt("total"), row.getInt("active"), row.getInt("passive")),
+                CustomerCountsJdbcMapper::map,
                 new CustomerCounts(0, 0, 0));
     }
 
@@ -112,7 +113,7 @@ public final class PostgresCustomerRepository extends JdbcRepository {
         return query("Find customer page", SELECT_CUSTOMERS_PAGE, statement -> {
             statement.setLong(1, lastSeenId);
             statement.setInt(2, limit);
-        }, PostgresCustomerRepository::toCustomer);
+        }, SampleCustomerJdbcMapper::map);
     }
 
     @Override
@@ -149,19 +150,6 @@ public final class PostgresCustomerRepository extends JdbcRepository {
                     on conflict (customer_no) do nothing
                     """);
         }
-    }
-
-    private static SampleCustomer toCustomer(ResultSet row) throws Exception {
-        return new SampleCustomer(
-                row.getLong("id"),
-                row.getString("customer_no"),
-                row.getString("full_name"),
-                row.getString("segment"),
-                row.getString("email"),
-                row.getString("status"),
-                row.getTimestamp("created_at").toInstant(),
-                row.getTimestamp("updated_at").toInstant()
-        );
     }
 
 }

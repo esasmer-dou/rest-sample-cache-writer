@@ -10,14 +10,40 @@ Bu uygulamanın tek işi vardır. PostgreSQL'den okur ve Redis'e yazar.
 
 REST endpoint açmaz. Dubbo kullanmaz. Java read model üretir. Redis yazma işi `java-rust-cache` ile Rust tarafında yapılır.
 
-Bu örnek `com.reactor:java-rust-cache:0.4.1` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
+Bu örnek `com.reactor:java-rust-cache:0.5.0` ile çalışır. Paket Windows ve Linux native binary'lerini içerir.
 Redis client açıkça `write-only` çalışır. Bu nedenle read pool ve read permit kaynakları açılmaz.
 
-[v0.3.1 sürüm notları](docs/RELEASE_NOTES_v0.3.1.md)
+[v0.4.0 sürüm notları](docs/RELEASE_NOTES_v0.4.0.md)
 
-Ortak row model record'ları `com.reactor.sample:rust-sample-model:0.2.0` paketinden gelir. Writer DB ve
+Ortak row model record'ları `com.reactor.sample:rust-sample-model:0.3.0` paketinden gelir. Writer DB ve
 projection logic'i kendi içinde tutar, ama diğer sample'larla ortak müşteri row modelini tekrar
 tanımlamaz.
+
+Tekrar eden registry ve JDBC mapping kodu derleme sırasında üretilir:
+
+- `CustomerProjection`, reader ve writer için ortak projection sözlüğüdür.
+- `@GenerateProjectionRegistry(CustomerProjection.class)`, projection ile writer method'unu doğrudan bağlar.
+- Ortak record'lardaki `@GenerateJdbcMapper`, `SampleCustomerJdbcMapper` ve
+  `CustomerCountsJdbcMapper` sınıflarını üretir.
+- Generated sınıflar doğrudan çağrı kullanır. Runtime reflection çalıştırmaz.
+
+```java
+@GenerateProjectionRegistry(CustomerProjection.class)
+public final class CustomerCacheMaterializer {
+    CustomerCacheMaterializer(RustCache cache,
+                              List<CacheWriterProjectionSettings> settings,
+                              int batchSize) {
+        projections = CustomerCacheMaterializerProjectionRegistry.create(
+                this, cache, settings, batchSize);
+    }
+
+    SnapshotResult writeDetail(ProjectionTarget target) { /* sorgula ve publish et */ }
+    SnapshotResult writeCampaign(ProjectionTarget target) { /* sorgula ve publish et */ }
+}
+```
+
+SQL ve JSON business şeklini uygulama kodunda açık tutun. Yalnız mekanik mapping ve registry kodunu
+generator'a bırakın.
 
 ## Property Katmanları
 
@@ -202,23 +228,23 @@ Sample artık kendi scheduler implementation sınıfını veya JSON escaping uti
 
 ```java
 public static void main(String[] args) {
-    ProjectionWriterApplication.run(
+    ProjectionWriterApplication.runCache(
             "rest-sample-cache-writer.properties",
             "sample.writer",
-            CacheWriterModule.INSTANCE);
+            CustomerCacheMaterializer::create);
 }
 ```
 
 `ProjectionWriterApplication`; projection takvimini okur, sınırlı scheduler thread'lerini yönetir,
 shutdown hook ekler ve kaynakları ters sırada kapatır. Başlangıç sırasında hata oluşursa o ana kadar
-açılmış kaynaklar da kapatılır. `CacheWriterModule`; repository, Redis client ve materializer
-bağlantılarını açık tutar. Lifecycle ayrıntıları `main` metoduna taşınmaz.
+açılmış kaynaklar da kapatılır. `runCache(...)`, Redis client'ı oluşturur ve yaşam döngüsünü yönetir.
+Materializer factory yalnızca repository ile açık business projection writer'larını oluşturur.
 
-`CustomerJsonWriter`, `SampleJsonWriter` sınıfından miras alır. Escaping, UTF-8 dönüşümü, primitive field
+`CustomerJsonWriter`, `JsonWriter` sınıfından miras alır. Escaping, UTF-8 dönüşümü, primitive field
 ve array helper kodu library'den gelir. Müşteri JSON şekli yine sample içinde açık kalır:
 
 ```java
-public final class CustomerJsonWriter extends SampleJsonWriter {
+public final class CustomerJsonWriter extends JsonWriter {
     public byte[] customerDetail(SampleCustomer customer) {
         StringBuilder json = json(768);
         // explicit customer field'ları burada kalır

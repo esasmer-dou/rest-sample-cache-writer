@@ -3,18 +3,23 @@ package com.reactor.sample.cache.writer.cache;
 import com.reactor.rust.cache.core.RustCache;
 import com.reactor.rust.cache.config.CacheProperties;
 import com.reactor.rust.cache.projection.CacheWriterProjectionSettings;
+import com.reactor.rust.cache.projection.GenerateProjectionRegistry;
 import com.reactor.rust.cache.projection.VersionedJsonProjectionMaterializer;
 import com.reactor.rust.cache.projection.VersionedJsonProjectionMaterializer.ProjectionTarget;
 import com.reactor.rust.cache.scheduler.ProjectionRefreshResult;
+import com.reactor.rust.cache.scheduler.ProjectionRefreshScheduler;
+import com.reactor.rust.cache.scheduler.ProjectionWriterApplication;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
 import com.reactor.sample.cache.writer.json.CustomerJsonWriter;
 import com.reactor.sample.model.customer.CustomerCounts;
 import com.reactor.sample.model.customer.SampleCustomer;
+import com.reactor.sample.model.cache.CustomerProjection;
 
 import java.time.Instant;
 import java.util.List;
 
+@GenerateProjectionRegistry(CustomerProjection.class)
 public final class CustomerCacheMaterializer {
 
     private final PostgresCustomerRepository repository;
@@ -24,6 +29,16 @@ public final class CustomerCacheMaterializer {
     private final int segmentIndexLimit;
     private final int statusIndexLimit;
     private final int campaignCandidateLimit;
+
+    public static ProjectionRefreshScheduler.ProjectionRefresher create(
+            ProjectionWriterApplication.ModuleContext context,
+            RustCache cache,
+            CacheProperties properties) {
+        PostgresCustomerRepository repository = context.manage(
+                PostgresCustomerRepository.fromProperties(properties));
+        CustomerCacheMaterializer materializer = new CustomerCacheMaterializer(repository, cache, properties);
+        return materializer::refreshProjection;
+    }
 
     public CustomerCacheMaterializer(
             PostgresCustomerRepository repository,
@@ -44,13 +59,11 @@ public final class CustomerCacheMaterializer {
         this.segmentIndexLimit = properties.getInt("sample.writer.segment-index-limit");
         this.statusIndexLimit = properties.getInt("sample.writer.status-index-limit");
         this.campaignCandidateLimit = properties.getInt("sample.writer.campaign-candidate-limit");
-        this.projections = VersionedJsonProjectionMaterializer.builder(cache, projectionSettings, batchSize)
-                .projection("detail", this::writeDetail)
-                .projection("segment", this::writeSegment)
-                .projection("status", this::writeStatus)
-                .projection("campaign", this::writeCampaign)
-                .projection("meta", this::writeMeta)
-                .build();
+        this.projections = CustomerCacheMaterializerProjectionRegistry.create(
+                this,
+                cache,
+                projectionSettings,
+                batchSize);
     }
 
     public List<String> projectionNames() {
@@ -61,7 +74,7 @@ public final class CustomerCacheMaterializer {
         return projections.refresh(projectionName, lockName, lockTtlMillis);
     }
 
-    private SnapshotResult writeDetail(ProjectionTarget projection) throws Exception {
+    SnapshotResult writeDetail(ProjectionTarget projection) throws Exception {
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
                 repository.forEachCustomerPage(pageSize, page -> {
                     for (SampleCustomer customer : page) {
@@ -72,7 +85,7 @@ public final class CustomerCacheMaterializer {
                 }));
     }
 
-    private SnapshotResult writeSegment(ProjectionTarget projection) throws Exception {
+    SnapshotResult writeSegment(ProjectionTarget projection) throws Exception {
         List<String> segments = repository.findSegments();
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot -> {
             for (String segment : segments) {
@@ -82,7 +95,7 @@ public final class CustomerCacheMaterializer {
         });
     }
 
-    private SnapshotResult writeStatus(ProjectionTarget projection) throws Exception {
+    SnapshotResult writeStatus(ProjectionTarget projection) throws Exception {
         List<String> statuses = repository.findStatuses();
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot -> {
             for (String status : statuses) {
@@ -92,13 +105,13 @@ public final class CustomerCacheMaterializer {
         });
     }
 
-    private SnapshotResult writeCampaign(ProjectionTarget projection) throws Exception {
+    SnapshotResult writeCampaign(ProjectionTarget projection) throws Exception {
         List<SampleCustomer> activeCustomers = repository.findCustomersByStatus("active", campaignCandidateLimit);
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
                 snapshot.putIndex("campaign", "retention", jsonWriter.campaignCandidates("retention", activeCustomers)));
     }
 
-    private SnapshotResult writeMeta(ProjectionTarget projection) throws Exception {
+    SnapshotResult writeMeta(ProjectionTarget projection) throws Exception {
         CustomerCounts counts = repository.countCustomersByStatus();
         List<String> segments = repository.findSegments();
         List<String> statuses = repository.findStatuses();
