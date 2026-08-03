@@ -18,6 +18,8 @@ RUN apt-get update \
 
 COPY java-rust-cache/pom.xml java-rust-cache/pom.xml
 COPY java-rust-cache/src java-rust-cache/src
+COPY rust-java-rest/pom.xml rust-java-rest/pom.xml
+COPY rust-java-rest/src rust-java-rest/src
 COPY rust-sample-model/pom.xml rust-sample-model/pom.xml
 COPY rust-sample-model/src rust-sample-model/src
 COPY rest-sample-utility/pom.xml rest-sample-utility/pom.xml
@@ -25,6 +27,7 @@ COPY rest-sample-utility/src rest-sample-utility/src
 COPY rest-sample-cache-writer/pom.xml rest-sample-cache-writer/pom.xml
 COPY rest-sample-cache-writer/src rest-sample-cache-writer/src
 
+RUN mvn -q -f rust-java-rest/pom.xml -DskipTests install
 RUN mvn -q -f java-rust-cache/pom.xml -DskipTests install
 RUN mvn -q -f rust-sample-model/pom.xml -DskipTests install
 RUN mvn -q -f rest-sample-utility/pom.xml -DskipTests install

@@ -2,13 +2,11 @@ package com.reactor.sample.cache.writer.cache;
 
 import com.reactor.rust.cache.core.RustCache;
 import com.reactor.rust.cache.config.CacheProperties;
-import com.reactor.rust.cache.projection.CacheWriterProjectionSettings;
 import com.reactor.rust.cache.projection.GenerateProjectionRegistry;
 import com.reactor.rust.cache.projection.VersionedJsonProjectionMaterializer;
 import com.reactor.rust.cache.projection.VersionedJsonProjectionMaterializer.ProjectionTarget;
 import com.reactor.rust.cache.scheduler.ProjectionRefreshResult;
 import com.reactor.rust.cache.scheduler.ProjectionRefreshScheduler;
-import com.reactor.rust.cache.scheduler.ProjectionWriterApplication;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
 import com.reactor.sample.cache.writer.json.CustomerJsonWriter;
@@ -20,7 +18,7 @@ import java.time.Instant;
 import java.util.List;
 
 @GenerateProjectionRegistry(CustomerProjection.class)
-public final class CustomerCacheMaterializer {
+public final class CustomerCacheMaterializer implements ProjectionRefreshScheduler.ProjectionRefresher {
 
     private final PostgresCustomerRepository repository;
     private final CustomerJsonWriter jsonWriter;
@@ -30,31 +28,12 @@ public final class CustomerCacheMaterializer {
     private final int statusIndexLimit;
     private final int campaignCandidateLimit;
 
-    public static ProjectionRefreshScheduler.ProjectionRefresher create(
-            ProjectionWriterApplication.ModuleContext context,
-            RustCache cache,
-            CacheProperties properties) {
-        PostgresCustomerRepository repository = context.manage(
-                PostgresCustomerRepository.fromProperties(properties));
-        CustomerCacheMaterializer materializer = new CustomerCacheMaterializer(repository, cache, properties);
-        return materializer::refreshProjection;
-    }
-
     public CustomerCacheMaterializer(
             PostgresCustomerRepository repository,
             RustCache cache,
             CacheProperties properties) {
-        this(repository, cache, properties, CacheWriterProjectionSettings.resolveAll(properties, "sample.writer"));
-    }
-
-    public CustomerCacheMaterializer(
-            PostgresCustomerRepository repository,
-            RustCache cache,
-            CacheProperties properties,
-            List<CacheWriterProjectionSettings> projectionSettings) {
         this.repository = repository;
         this.jsonWriter = new CustomerJsonWriter();
-        int batchSize = properties.getInt("sample.writer.snapshot-batch-size");
         this.pageSize = properties.getInt("sample.writer.page-size");
         this.segmentIndexLimit = properties.getInt("sample.writer.segment-index-limit");
         this.statusIndexLimit = properties.getInt("sample.writer.status-index-limit");
@@ -62,15 +41,16 @@ public final class CustomerCacheMaterializer {
         this.projections = CustomerCacheMaterializerProjectionRegistry.create(
                 this,
                 cache,
-                projectionSettings,
-                batchSize);
+                properties,
+                "sample.writer");
     }
 
     public List<String> projectionNames() {
         return List.copyOf(projections.projectionNames());
     }
 
-    public ProjectionRefreshResult refreshProjection(String projectionName, String lockName, long lockTtlMillis) {
+    @Override
+    public ProjectionRefreshResult refresh(String projectionName, String lockName, long lockTtlMillis) {
         return projections.refresh(projectionName, lockName, lockTtlMillis);
     }
 

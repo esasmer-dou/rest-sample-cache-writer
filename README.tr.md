@@ -10,7 +10,14 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `java-rust-cache:0.5.0`, `rust-sample-model:0.3.0`.
+Kullanılan sürümler: `java-rust-cache:0.6.0`, `rust-sample-model:0.3.1`.
+
+## 0.5.0 ile Neler Sadeleşti?
+
+- Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.
+- Generated projection registry bağlantısı tekrar eden projection lookup kodunu kaldırır.
+- SQL sorguları ve JSON business mapping açık Java kodu olarak kalır.
+- Projection adları, yenileme aralıkları, TTL kuralları, lock'lar ve Redis key'leri değişmedi.
 
 ## Buradan Başlayın
 
@@ -173,10 +180,14 @@ Her projection için farklı bir `lock-name` kullanın.
 | Dosya | Görevi |
 |---|---|
 | `RestSampleCacheWriterApplication.java` | Projection scheduler'ını başlatır |
-| `CustomerCacheMaterializer.java` | Sorguları çalıştırır ve snapshot yayınlar |
+| `CustomerCacheMaterializer.java` | Projection refresher'ı uygular; generated registry her projection'ı bağlar |
 | `PostgresCustomerRepository.java` | SQL ve database paging işlemlerini yönetir |
 | `CustomerJsonWriter.java` | Ek Java nesne ağacı oluşturmadan JSON yazar |
 | `rest-sample-cache-writer.properties` | Lokal ayarları taşır |
+
+Uygulama, dört parametreli managed `ProjectionWriterApplication.runCache(...)` metodunu kullanır.
+İki method reference repository ve materializer oluşturur. Redis, scheduler, repository ve kapanış
+sırası library tarafından yönetilir. SQL sorguları ve JSON business şekli açık Java kodu olarak kalır.
 
 ## Maven Package Erişimi
 
@@ -215,4 +226,4 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 - [Türkçe PDF rehberi](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production ayarları](src/main/resources/config/production.properties)
 - [Advanced tuning ayarları](src/main/resources/config/advanced-tuning.properties)
-- [v0.4.0 release notları](docs/RELEASE_NOTES_v0.4.0.md)
+- [v0.5.0 release notları](docs/RELEASE_NOTES_v0.5.0.tr.md)

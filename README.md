@@ -10,7 +10,14 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `java-rust-cache:0.5.0`, `rust-sample-model:0.3.0`.
+Current versions: `java-rust-cache:0.6.0`, `rust-sample-model:0.3.1`.
+
+## What 0.5.0 Simplifies
+
+- The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
+- Generated projection registry wiring replaces repeated projection lookup code.
+- SQL queries and JSON business mapping remain explicit Java code.
+- Projection names, refresh intervals, TTL rules, locks, and Redis keys are unchanged.
 
 ## Start Here
 
@@ -173,10 +180,14 @@ Use a different `lock-name` for every projection.
 | File | Why it matters |
 |---|---|
 | `RestSampleCacheWriterApplication.java` | Starts the projection scheduler |
-| `CustomerCacheMaterializer.java` | Runs projection queries and publishes snapshots |
+| `CustomerCacheMaterializer.java` | Implements the projection refresher; generated registry connects each projection |
 | `PostgresCustomerRepository.java` | Owns SQL and database paging |
 | `CustomerJsonWriter.java` | Writes JSON without an extra Java object tree |
 | `rest-sample-cache-writer.properties` | Local settings |
+
+The application uses the managed four-argument `ProjectionWriterApplication.runCache(...)` overload.
+Two method references create the repository and materializer. The library owns Redis, scheduler,
+repository, and shutdown order. SQL queries and JSON business shape remain explicit Java code.
 
 ## Maven Package Access
 
@@ -215,4 +226,4 @@ Add these server IDs to `~/.m2/settings.xml`:
 - [Turkish PDF guide](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production settings](src/main/resources/config/production.properties)
 - [Advanced tuning](src/main/resources/config/advanced-tuning.properties)
-- [v0.4.0 release notes](docs/RELEASE_NOTES_v0.4.0.md)
+- [v0.5.0 release notes](docs/RELEASE_NOTES_v0.5.0.md)

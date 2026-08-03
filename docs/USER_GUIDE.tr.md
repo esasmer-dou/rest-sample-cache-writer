@@ -74,23 +74,26 @@ Sonra writer'ı çalıştırın:
 
 ```powershell
 mvn -q package
-java -jar target/rest-sample-cache-writer-0.4.0.jar
+mvn -q exec:java
 ```
 
 Tek seferlik snapshot için:
 
 ```powershell
-java "-Dsample.writer.run-once=true" -jar target/rest-sample-cache-writer-0.4.0.jar
+mvn -q -Dsample.writer.run-once=true exec:java
 ```
+
+Üretilen ince JAR yalnızca uygulama sınıflarını içerir. Doğrudan `java -jar` yerine Maven komutunu
+veya bu rehberdeki jlink image akışını kullanın.
 
 ## Kopyala-Yapıştır Örnekler
 
 Sadece tek seferlik snapshot üret:
 
 ```powershell
-java "-Dsample.writer.run-once=true" `
+mvn -q "-Dsample.writer.run-once=true" `
   "-Dsample.writer.projections=detail,segment,meta" `
-  -jar target/rest-sample-cache-writer-0.4.0.jar
+  exec:java
 ```
 
 Kampanya projection'ını daha sık yenile:
