@@ -10,14 +10,30 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `java-rust-cache:0.6.0`, `rust-sample-model:0.3.1`.
+Current versions: `java-rust-cache:0.7.0`, `rust-sample-model:0.4.0`.
 
-## What 0.5.0 Simplifies
+The POM uses `rust-java-platform-parent` and one `rust-java-starter-cache-writer` dependency. This
+starter intentionally does not pull the REST runtime into the scheduled writer process. Code
+generators stay on the compiler path and are not packaged as production classes.
+
+## What 0.6.0 Simplifies
 
 - The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
 - Generated projection registry wiring replaces repeated projection lookup code.
 - SQL queries and JSON business mapping remain explicit Java code.
 - Projection names, refresh intervals, TTL rules, locks, and Redis keys are unchanged.
+
+## Declarative Flow
+
+| You write | Generated or managed for you | Not created in this process |
+| --- | --- | --- |
+| SQL and batch repository | Repository lifecycle and shutdown order | REST server |
+| Projection materializer | Projection registry and schedules | Redis read pool |
+| JSON business shape | Bounded publish pipeline | Dubbo runtime |
+| Per-projection interval, TTL, and lock | Scheduler and fenced lock ownership | Duplicate schedule wiring |
+
+The framework removes lifecycle and registry boilerplate. SQL, data selection, and JSON business
+shape remain explicit Java code so the cache contract stays reviewable.
 
 ## Start Here
 
@@ -226,4 +242,4 @@ Add these server IDs to `~/.m2/settings.xml`:
 - [Turkish PDF guide](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production settings](src/main/resources/config/production.properties)
 - [Advanced tuning](src/main/resources/config/advanced-tuning.properties)
-- [v0.5.0 release notes](docs/RELEASE_NOTES_v0.5.0.md)
+- [v0.6.0 release notes](docs/RELEASE_NOTES_v0.6.0.md)

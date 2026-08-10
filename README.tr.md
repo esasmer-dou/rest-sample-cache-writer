@@ -10,14 +10,30 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `java-rust-cache:0.6.0`, `rust-sample-model:0.3.1`.
+Kullanılan sürümler: `java-rust-cache:0.7.0`, `rust-sample-model:0.4.0`.
 
-## 0.5.0 ile Neler Sadeleşti?
+POM, `rust-java-platform-parent` ve tek bir `rust-java-starter-cache-writer` bağımlılığı kullanır.
+Bu starter scheduler process'ine REST runtime eklemez. Kod üreteçleri yalnız derleyici yolunda kalır
+ve production sınıfı olarak pakete girmez.
+
+## 0.6.0 ile Neler Sadeleşti?
 
 - Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.
 - Generated projection registry bağlantısı tekrar eden projection lookup kodunu kaldırır.
 - SQL sorguları ve JSON business mapping açık Java kodu olarak kalır.
 - Projection adları, yenileme aralıkları, TTL kuralları, lock'lar ve Redis key'leri değişmedi.
+
+## Deklaratif Akış
+
+| Sizin yazdığınız kod | Framework'ün ürettiği veya yönettiği alan | Bu process'te hiç açılmayan alan |
+| --- | --- | --- |
+| SQL ve batch repository | Repository lifecycle ve shutdown sırası | REST server |
+| Projection materializer | Projection registry ve schedule'lar | Redis read pool |
+| JSON business şekli | Bounded publish pipeline | Dubbo runtime |
+| Projection bazlı interval, TTL ve lock | Scheduler ve fenced lock sahipliği | Tekrar eden schedule bağlantı kodu |
+
+Framework lifecycle ve registry boilerplate kodunu kaldırır. SQL, veri seçimi ve JSON business şekli
+açık Java kodu olarak kalır. Böylece cache sözleşmesi kolayca incelenebilir.
 
 ## Buradan Başlayın
 
@@ -226,4 +242,4 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 - [Türkçe PDF rehberi](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production ayarları](src/main/resources/config/production.properties)
 - [Advanced tuning ayarları](src/main/resources/config/advanced-tuning.properties)
-- [v0.5.0 release notları](docs/RELEASE_NOTES_v0.5.0.tr.md)
+- [v0.6.0 release notları](docs/RELEASE_NOTES_v0.6.0.tr.md)
