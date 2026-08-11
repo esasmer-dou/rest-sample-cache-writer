@@ -12,6 +12,18 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 
 Current versions: `rust-java-rest:4.3.0`, `java-rust-cache:0.7.1`, `rust-sample-model:0.4.1`.
 
+## Read This First
+
+Choose this sample when one scheduled process owns PostgreSQL-to-Redis materialization. Do not add a
+REST server or a Redis read plane to this process unless it has a separate measured responsibility.
+
+| Goal | Go to |
+| --- | --- |
+| Run PostgreSQL, Redis, and one publish | [Quick Start](#quick-start) |
+| Understand TTL, refresh, and lock safety | [Schedule, TTL, and Lock](#schedule-ttl-and-lock) |
+| Choose standalone, Sentinel, or Cluster | [Redis Topology](#redis-topology) |
+| Run more than one replica | [Multiple Replicas](#multiple-replicas) |
+
 The POM uses `rust-java-platform-parent` and one `rust-java-starter-cache-writer` dependency. This
 starter intentionally does not pull the REST runtime into the scheduled writer process. Code
 generators stay on the compiler path and are not packaged as production classes.
@@ -43,6 +55,14 @@ A projection is a cache view prepared for one endpoint group, such as customer d
 
 ```text
 PostgreSQL -> this writer -> Redis -> cache reader -> HTTP client
+```
+
+```mermaid
+flowchart LR
+    DB["PostgreSQL"] --> R["Java repository"]
+    R --> M["Projection materializer"]
+    M -->|"fenced native publish"| C["Redis"]
+    C --> API["Cache reader REST API"]
 ```
 
 ## Quick Start
@@ -235,6 +255,28 @@ Add these server IDs to `~/.m2/settings.xml`:
 | Reader sees old or missing data | Projection namespace, refresh interval, TTL, and writer logs |
 | Two replicas publish the same data | Projection lock names must match across replicas |
 | Redis memory grows too quickly | Reduce retained versions, TTLs, index limits, or active projections |
+
+## Production Checklist
+
+- Keep `reactor.cache.redis.access-mode=write-only`.
+- Keep every TTL longer than its projection refresh interval.
+- Give every independently scheduled projection a stable, unique lock name.
+- Keep SQL paging and batch size bounded; do not load the full source table into one list.
+- Size Hikari connections from database capacity, not scheduler thread count.
+- Make publish idempotent and use fenced ownership before moving the active snapshot version.
+- Test two replicas, lock handover, Redis restart/failover, DB timeout, partial publish, and recovery.
+- Measure publish duration, schedule lag, DB pool wait, Redis p99, RSS, and retained versions.
+
+## Glossary
+
+| Term | Meaning |
+| --- | --- |
+| Projection | A cache view prepared for one endpoint or query family |
+| Refresh interval | How often that projection is rebuilt |
+| TTL | How long Redis keeps data without another successful refresh |
+| Fenced lock | Lock ownership that prevents a stale replica from publishing |
+| Active version | Snapshot version that readers currently resolve |
+| Materializer | Java code that reads source rows and creates the cache representation |
 
 ## More Detail
 

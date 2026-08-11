@@ -12,6 +12,19 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 
 Kullanılan sürümler: `rust-java-rest:4.3.0`, `java-rust-cache:0.7.1`, `rust-sample-model:0.4.1`.
 
+## Önce Bu Bölümü Okuyun
+
+PostgreSQL verisini Redis'e hazırlama sorumluluğu tek bir scheduler process'inde olacaksa bu sample
+doğru başlangıçtır. Ayrı ve ölçülmüş bir sorumluluk yoksa bu process'e REST server veya Redis read
+plane eklemeyin.
+
+| Hedef | Bölüm |
+| --- | --- |
+| PostgreSQL, Redis ve tek publish çalıştırmak | [Hızlı Başlangıç](#hızlı-başlangıç) |
+| TTL, refresh ve lock güvenliğini anlamak | [Çalışma Aralığı, TTL ve Kilit](#çalışma-aralığı-ttl-ve-kilit) |
+| Standalone, Sentinel veya Cluster seçmek | [Redis Çalışma Biçimini Seçin](#redis-çalışma-biçimini-seçin) |
+| Birden fazla replica çalıştırmak | [Birden Fazla Replica](#birden-fazla-replica) |
+
 POM, `rust-java-platform-parent` ve tek bir `rust-java-starter-cache-writer` bağımlılığı kullanır.
 Bu starter scheduler process'ine REST runtime eklemez. Kod üreteçleri yalnız derleyici yolunda kalır
 ve production sınıfı olarak pakete girmez.
@@ -43,6 +56,14 @@ Projection, belirli bir endpoint grubu için hazırlanmış cache görünümüd�
 
 ```text
 PostgreSQL -> bu writer -> Redis -> cache reader -> HTTP istemcisi
+```
+
+```mermaid
+flowchart LR
+    DB["PostgreSQL"] --> R["Java repository"]
+    R --> M["Projection materializer"]
+    M -->|"fenced native publish"| C["Redis"]
+    C --> API["Cache reader REST API"]
 ```
 
 ## Hızlı Başlangıç
@@ -235,6 +256,28 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 | Reader eski veya eksik veri görüyor | Projection namespace, interval, TTL ve writer logları |
 | İki replica aynı veriyi yazıyor | Projection lock adları bütün replica'larda aynı olmalı |
 | Redis memory hızlı büyüyor | Saklanan sürüm, TTL, index limiti ve aktif veri grubu sayısı |
+
+## Production Kontrol Listesi
+
+- `reactor.cache.redis.access-mode=write-only` değerini koruyun.
+- Her TTL değerini ilgili projection yenileme aralığından uzun tutun.
+- Bağımsız çalışan her projection için sabit ve farklı lock adı kullanın.
+- SQL paging ve batch size değerlerini sınırlayın. Kaynak tablonun tamamını tek listeye almayın.
+- Hikari connection sayısını scheduler thread sayısına göre değil, veritabanı kapasitesine göre belirleyin.
+- Publish işlemini idempotent yapın. Aktif snapshot sürümünü değiştirmeden önce fenced ownership kullanın.
+- İki replica, lock devri, Redis restart/failover, DB timeout, yarım kalan publish ve recovery testi yapın.
+- Publish süresi, schedule gecikmesi, DB pool wait, Redis p99, RSS ve saklanan sürümleri ölçün.
+
+## Kısa Sözlük
+
+| Terim | Basit anlamı |
+| --- | --- |
+| Projection | Bir endpoint veya sorgu ailesi için hazırlanmış cache görünümü |
+| Refresh interval | Projection'ın ne sıklıkla yeniden üretildiği |
+| TTL | Yeni başarılı refresh olmadan verinin Redis'te kalacağı süre |
+| Fenced lock | Eski replica'nın publish yapmasını engelleyen ownership kontrollü kilit |
+| Active version | Reader'ın o anda çözdüğü snapshot sürümü |
+| Materializer | Kaynak satırları okuyup cache gösterimini üreten Java kodu |
 
 ## Ayrıntılı Bilgi
 
