@@ -10,13 +10,13 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `java-rust-cache:0.7.0`, `rust-sample-model:0.4.0`.
+Current versions: `rust-java-rest:4.3.0`, `java-rust-cache:0.7.1`, `rust-sample-model:0.4.1`.
 
 The POM uses `rust-java-platform-parent` and one `rust-java-starter-cache-writer` dependency. This
 starter intentionally does not pull the REST runtime into the scheduled writer process. Code
 generators stay on the compiler path and are not packaged as production classes.
 
-## What 0.6.0 Simplifies
+## What 0.6.1 Aligns
 
 - The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
 - Generated projection registry wiring replaces repeated projection lookup code.
@@ -242,4 +242,4 @@ Add these server IDs to `~/.m2/settings.xml`:
 - [Turkish PDF guide](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production settings](src/main/resources/config/production.properties)
 - [Advanced tuning](src/main/resources/config/advanced-tuning.properties)
-- [v0.6.0 release notes](docs/RELEASE_NOTES_v0.6.0.md)
+- [v0.6.1 release notes](docs/RELEASE_NOTES_v0.6.1.md)
