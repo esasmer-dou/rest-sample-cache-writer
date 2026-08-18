@@ -10,7 +10,7 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `rust-java-rest:4.5.0`, `java-rust-cache:0.7.4`, `rust-sample-model:0.4.1`.
+Kullanılan sürümler: `rust-java-rest:4.5.6`, `java-rust-cache:0.7.5`, `rust-sample-model:0.4.2`.
 
 ## Önce Bu Bölümü Okuyun
 
@@ -24,12 +24,13 @@ plane eklemeyin.
 | TTL, refresh ve lock güvenliğini anlamak | [Çalışma Aralığı, TTL ve Kilit](#çalışma-aralığı-ttl-ve-kilit) |
 | Standalone, Sentinel veya Cluster seçmek | [Redis Çalışma Biçimini Seçin](#redis-çalışma-biçimini-seçin) |
 | Birden fazla replica çalıştırmak | [Birden Fazla Replica](#birden-fazla-replica) |
+| Agent desteğinin sınırını anlamak | [Glowroot Agent Kullanımı](#glowroot-agent-kullanımı) |
 
 POM, `rust-java-platform-parent` ve tek bir `rust-java-starter-cache-writer` bağımlılığı kullanır.
 Bu starter scheduler process'ine REST runtime eklemez. Kod üreteçleri yalnız derleyici yolunda kalır
 ve production sınıfı olarak pakete girmez.
 
-## 0.6.4 ile Neler Hizalandı?
+## 0.6.5 ile Neler Hizalandı?
 
 - Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.
 - Generated projection registry bağlantısı tekrar eden projection lookup kodunu kaldırır.
@@ -202,6 +203,39 @@ java "-Dreactor.config.file=src/main/resources/config/production.properties" ...
 
 Bütün limitleri aynı anda artırmayın. Bu yaklaşım gerçek darboğazı gizler ve process memory (RSS) değerini yükseltir.
 
+## Glowroot Agent Kullanımı
+
+Bu writer sade Java scheduler uygulamasıdır. REST server ve Spring Boot kullanmaz. Sınırlı
+`java-rust-glowroot-agent:0.4.0` bugün bu süreçte kendiliğinden başlamaz.
+
+Şu iki işlem tek başına yeterli değildir:
+
+```properties
+reactor.glowroot.enabled=true
+```
+
+```text
+-javaagent:java-rust-glowroot-agent-0.4.0.jar
+```
+
+Bootstrap JAR yalnız başlangıç argümanlarını property'lere çevirir. Native agent çalışma katmanını oluşturmaz.
+Spring starter'ı yalnız telemetri almak için bu projeye eklemeyin. Bu, kullanılmayan Spring sınıfları
+ve lifecycle ekleyerek sample'ın düşük bellek hedefini bozar.
+
+| Durum | Doğru seçim | Sonuç |
+|---|---|---|
+| Bu sample olduğu gibi sade Java kalacak | Kubernetes süreç/container ölçümleri ve writer logları | En küçük çalışma katmanı; Glowroot Central'a agent verisi gitmez |
+| Uygulama zaten başka bir nedenle Spring Boot | Non-web Spring starter ve `jvm` veya `sql` profili | Bounded agent kullanılabilir; Spring zaten mevcut olmalıdır |
+| Her JDBC ve Java metodunu otomatik izlemek gerekiyor | Tam Glowroot Java agent | Daha geniş özellik; daha yüksek memory ve CPU maliyeti |
+| Sade Java içinde sınırlı Rust agent gerekiyor | Spring bağımsız standalone çalışma katmanı | Bu özellik `0.4.0` paketinde henüz yoktur |
+
+`java-rust-cache` Redis I/O işlemini Rust'ta yürütmeye devam eder. Ancak agent altyapısı başlamadığı
+için native Redis toplamları bu writer sürecinden Glowroot Central'a gönderilmez.
+
+Uygulama gerçekten Spring Boot non-web process'e dönüştürülürse kurulum için
+[`java-rust-glowroot-agent`](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/master/README.tr.md#2-web-olmayan-uygulamalar)
+bölümünü kullanın. Yalnız telemetri için bu dönüşümü yapmayın.
+
 ## Birden Fazla Replica
 
 Birden fazla replica güvenle çalışabilir.
@@ -257,6 +291,7 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 | Reader eski veya eksik veri görüyor | Projection namespace, interval, TTL ve writer logları |
 | İki replica aynı veriyi yazıyor | Projection lock adları bütün replica'larda aynı olmalı |
 | Redis memory hızlı büyüyor | Saklanan sürüm, TTL, index limiti ve aktif veri grubu sayısı |
+| `reactor.glowroot.enabled=true` yazdım ama veri yok | Bu sade Java sample agent çalışma katmanını başlatmaz; yukarıdaki destek sınırını okuyun |
 
 ## Production Kontrol Listesi
 
@@ -268,6 +303,7 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 - Publish işlemini idempotent yapın. Aktif snapshot sürümünü değiştirmeden önce fenced ownership kullanın.
 - İki replica, lock devri, Redis restart/failover, DB timeout, yarım kalan publish ve recovery testi yapın.
 - Publish süresi, schedule gecikmesi, DB pool wait, Redis p99, RSS ve saklanan sürümleri ölçün.
+- Yalnız telemetri için Spring Boot veya REST runtime eklemeyin.
 
 ## Kısa Sözlük
 
@@ -279,6 +315,7 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 | Fenced lock | Eski replica'nın publish yapmasını engelleyen ownership kontrollü kilit |
 | Active version | Reader'ın o anda çözdüğü snapshot sürümü |
 | Materializer | Kaynak satırları okuyup cache gösterimini üreten Java kodu |
+| Bootstrap agent JAR | Yalnız `-javaagent` argümanlarını property'lere çeviren, runtime içermeyen küçük JAR |
 
 ## Ayrıntılı Bilgi
 
@@ -286,4 +323,4 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 - [Türkçe PDF rehberi](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production ayarları](src/main/resources/config/production.properties)
 - [Advanced tuning ayarları](src/main/resources/config/advanced-tuning.properties)
-- [v0.6.4 sürüm notları](docs/RELEASE_NOTES_v0.6.4.tr.md)
+- [v0.6.5 sürüm notları](docs/RELEASE_NOTES_v0.6.5.tr.md)

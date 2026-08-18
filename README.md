@@ -10,7 +10,7 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `rust-java-rest:4.5.0`, `java-rust-cache:0.7.4`, `rust-sample-model:0.4.1`.
+Current versions: `rust-java-rest:4.5.6`, `java-rust-cache:0.7.5`, `rust-sample-model:0.4.2`.
 
 ## Read This First
 
@@ -23,12 +23,13 @@ REST server or a Redis read plane to this process unless it has a separate measu
 | Understand TTL, refresh, and lock safety | [Schedule, TTL, and Lock](#schedule-ttl-and-lock) |
 | Choose standalone, Sentinel, or Cluster | [Redis Topology](#redis-topology) |
 | Run more than one replica | [Multiple Replicas](#multiple-replicas) |
+| Understand the agent boundary | [Glowroot Agent Use](#glowroot-agent-use) |
 
 The POM uses `rust-java-platform-parent` and one `rust-java-starter-cache-writer` dependency. This
 starter intentionally does not pull the REST runtime into the scheduled writer process. Code
 generators stay on the compiler path and are not packaged as production classes.
 
-## What 0.6.4 Aligns
+## What 0.6.5 Aligns
 
 - The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
 - Generated projection registry wiring replaces repeated projection lookup code.
@@ -201,6 +202,39 @@ Important starting values:
 
 Do not increase all limits together. That hides the real bottleneck and increases RSS.
 
+## Glowroot Agent Use
+
+This writer is a plain Java scheduled application. It does not use a REST server or Spring Boot. The
+bounded `java-rust-glowroot-agent:0.4.0` does not start automatically in this process today.
+
+Neither of these actions is sufficient on its own:
+
+```properties
+reactor.glowroot.enabled=true
+```
+
+```text
+-javaagent:java-rust-glowroot-agent-0.4.0.jar
+```
+
+The bootstrap JAR only maps startup arguments to properties. It does not create the native agent
+runtime. Do not add the Spring starter only to obtain telemetry. That would add unused Spring classes
+and lifecycle state and would break the sample's low-memory purpose.
+
+| Situation | Correct choice | Result |
+|---|---|---|
+| Keep this sample as plain Java | Kubernetes process/container metrics and writer logs | Smallest runtime; no agent data is sent to Glowroot Central |
+| The application already uses Spring Boot for another reason | Non-web Spring starter with `jvm` or `sql` | Bounded agent is available because Spring already exists |
+| Every JDBC call and Java method needs automatic instrumentation | Full Glowroot Java agent | Broader features with higher memory and CPU cost |
+| Plain Java needs the bounded Rust agent | A Spring-independent standalone runtime | This artifact is not part of release `0.4.0` |
+
+`java-rust-cache` still performs Redis I/O in Rust. However, because the agent engine is not started,
+native Redis aggregates from this writer are not exported to Glowroot Central.
+
+If the application is deliberately converted into a non-web Spring Boot process, follow the
+[`java-rust-glowroot-agent`](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/master/README.md#2-non-web-applications)
+guide. Do not make that conversion only for telemetry.
+
 ## Multiple Replicas
 
 Multiple replicas are supported.
@@ -256,6 +290,7 @@ Add these server IDs to `~/.m2/settings.xml`:
 | Reader sees old or missing data | Projection namespace, refresh interval, TTL, and writer logs |
 | Two replicas publish the same data | Projection lock names must match across replicas |
 | Redis memory grows too quickly | Reduce retained versions, TTLs, index limits, or active projections |
+| `reactor.glowroot.enabled=true` produces no data | This plain-Java sample does not start the agent runtime; see the boundary above |
 
 ## Production Checklist
 
@@ -267,6 +302,7 @@ Add these server IDs to `~/.m2/settings.xml`:
 - Make publish idempotent and use fenced ownership before moving the active snapshot version.
 - Test two replicas, lock handover, Redis restart/failover, DB timeout, partial publish, and recovery.
 - Measure publish duration, schedule lag, DB pool wait, Redis p99, RSS, and retained versions.
+- Do not add Spring Boot or the REST runtime only for telemetry.
 
 ## Glossary
 
@@ -278,6 +314,7 @@ Add these server IDs to `~/.m2/settings.xml`:
 | Fenced lock | Lock ownership that prevents a stale replica from publishing |
 | Active version | Snapshot version that readers currently resolve |
 | Materializer | Java code that reads source rows and creates the cache representation |
+| Bootstrap agent JAR | Small JAR that maps `-javaagent` arguments to properties and contains no runtime |
 
 ## More Detail
 
@@ -285,4 +322,4 @@ Add these server IDs to `~/.m2/settings.xml`:
 - [Turkish PDF guide](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production settings](src/main/resources/config/production.properties)
 - [Advanced tuning](src/main/resources/config/advanced-tuning.properties)
-- [v0.6.4 release notes](docs/RELEASE_NOTES_v0.6.4.md)
+- [v0.6.5 release notes](docs/RELEASE_NOTES_v0.6.5.md)
