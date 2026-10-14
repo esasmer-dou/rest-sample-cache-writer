@@ -10,7 +10,7 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `rust-java-rest:4.5.6`, `java-rust-cache:0.7.5`, `rust-sample-model:0.4.2`.
+Kullanılan sürümler: `rust-java-platform-parent:4.6.2`, `java-rust-cache:0.7.6`, `rust-sample-model:0.4.2`.
 
 ## Önce Bu Bölümü Okuyun
 
@@ -30,13 +30,16 @@ POM, `rust-java-platform-parent` ve tek bir `rust-java-starter-cache-writer` ba�
 Bu starter scheduler process'ine REST runtime eklemez. Kod üreteçleri yalnız derleyici yolunda kalır
 ve production sınıfı olarak pakete girmez.
 
-## 0.6.5 ile Neler Hizalandı?
+## Güncel Kaynak Ayarları
+
+Bu kaynak ağacı platform parent `4.6.2` kullanır. Sample sürümü `0.6.5` olarak kalır.
+Bu hizalamayı kullanmak için kaynak kodu yeniden derleyin. Yayınlanmış sample paketi güncellenmedi.
 
 - Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.
 - Generated projection registry bağlantısı tekrar eden projection lookup kodunu kaldırır.
 - SQL sorguları ve JSON business mapping açık Java kodu olarak kalır.
 - Projection adları, yenileme aralıkları, TTL kuralları, lock'lar ve Redis key'leri değişmedi.
-- Cache writer temiz ortak native ABI `29/7/6/3` provenance hattını kullanır.
+- Cache writer, Redis ABI `6` ve pakete ait SHA-256 bilgisini doğrular. REST runtime başlatmaz.
 
 ## Deklaratif Akış
 
@@ -206,7 +209,7 @@ Bütün limitleri aynı anda artırmayın. Bu yaklaşım gerçek darboğazı giz
 ## Glowroot Agent Kullanımı
 
 Bu writer sade Java scheduler uygulamasıdır. REST server ve Spring Boot kullanmaz. Sınırlı
-`java-rust-glowroot-agent:0.4.0` bugün bu süreçte kendiliğinden başlamaz.
+`java-rust-glowroot-agent:0.5.4` bugün bu süreçte kendiliğinden başlamaz.
 
 Şu iki işlem tek başına yeterli değildir:
 
@@ -215,7 +218,7 @@ reactor.glowroot.enabled=true
 ```
 
 ```text
--javaagent:java-rust-glowroot-agent-0.4.0.jar
+-javaagent:java-rust-glowroot-agent-0.5.4.jar
 ```
 
 Bootstrap JAR yalnız başlangıç argümanlarını property'lere çevirir. Native agent çalışma katmanını oluşturmaz.
@@ -227,7 +230,7 @@ ve lifecycle ekleyerek sample'ın düşük bellek hedefini bozar.
 | Bu sample olduğu gibi sade Java kalacak | Kubernetes süreç/container ölçümleri ve writer logları | En küçük çalışma katmanı; Glowroot Central'a agent verisi gitmez |
 | Uygulama zaten başka bir nedenle Spring Boot | Non-web Spring starter ve `jvm` veya `sql` profili | Bounded agent kullanılabilir; Spring zaten mevcut olmalıdır |
 | Her JDBC ve Java metodunu otomatik izlemek gerekiyor | Tam Glowroot Java agent | Daha geniş özellik; daha yüksek memory ve CPU maliyeti |
-| Sade Java içinde sınırlı Rust agent gerekiyor | Spring bağımsız standalone çalışma katmanı | Bu özellik `0.4.0` paketinde henüz yoktur |
+| Sade Java içinde sınırlı Rust agent gerekiyor | Spring bağımsız standalone çalışma katmanı | `0.5.4` sürümü bu sade Java entegrasyonunu içermez |
 
 `java-rust-cache` Redis I/O işlemini Rust'ta yürütmeye devam eder. Ancak agent altyapısı başlamadığı
 için native Redis toplamları bu writer sürecinden Glowroot Central'a gönderilmez.

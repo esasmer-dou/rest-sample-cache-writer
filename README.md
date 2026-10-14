@@ -10,7 +10,7 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `rust-java-rest:4.5.6`, `java-rust-cache:0.7.5`, `rust-sample-model:0.4.2`.
+Current versions: `rust-java-platform-parent:4.6.2`, `java-rust-cache:0.7.6`, `rust-sample-model:0.4.2`.
 
 ## Read This First
 
@@ -29,13 +29,16 @@ The POM uses `rust-java-platform-parent` and one `rust-java-starter-cache-writer
 starter intentionally does not pull the REST runtime into the scheduled writer process. Code
 generators stay on the compiler path and are not packaged as production classes.
 
-## What 0.6.5 Aligns
+## Current Checkout
+
+This checkout uses platform parent `4.6.2`. The sample version remains `0.6.5`.
+Rebuild the source to use this alignment. The published sample package has not been replaced.
 
 - The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
 - Generated projection registry wiring replaces repeated projection lookup code.
 - SQL queries and JSON business mapping remain explicit Java code.
 - Projection names, refresh intervals, TTL rules, locks, and Redis keys are unchanged.
-- The cache writer uses the clean shared native ABI `29/7/6/3` provenance line.
+- The cache writer verifies Redis ABI `6` and its packaged SHA-256. It does not start a REST runtime.
 
 ## Declarative Flow
 
@@ -205,7 +208,7 @@ Do not increase all limits together. That hides the real bottleneck and increase
 ## Glowroot Agent Use
 
 This writer is a plain Java scheduled application. It does not use a REST server or Spring Boot. The
-bounded `java-rust-glowroot-agent:0.4.0` does not start automatically in this process today.
+bounded `java-rust-glowroot-agent:0.5.4` does not start automatically in this process today.
 
 Neither of these actions is sufficient on its own:
 
@@ -214,7 +217,7 @@ reactor.glowroot.enabled=true
 ```
 
 ```text
--javaagent:java-rust-glowroot-agent-0.4.0.jar
+-javaagent:java-rust-glowroot-agent-0.5.4.jar
 ```
 
 The bootstrap JAR only maps startup arguments to properties. It does not create the native agent
@@ -226,7 +229,7 @@ and lifecycle state and would break the sample's low-memory purpose.
 | Keep this sample as plain Java | Kubernetes process/container metrics and writer logs | Smallest runtime; no agent data is sent to Glowroot Central |
 | The application already uses Spring Boot for another reason | Non-web Spring starter with `jvm` or `sql` | Bounded agent is available because Spring already exists |
 | Every JDBC call and Java method needs automatic instrumentation | Full Glowroot Java agent | Broader features with higher memory and CPU cost |
-| Plain Java needs the bounded Rust agent | A Spring-independent standalone runtime | This artifact is not part of release `0.4.0` |
+| Plain Java needs the bounded Rust agent | A Spring-independent standalone runtime | Release `0.5.4` does not include this plain-Java integration |
 
 `java-rust-cache` still performs Redis I/O in Rust. However, because the agent engine is not started,
 native Redis aggregates from this writer are not exported to Glowroot Central.
