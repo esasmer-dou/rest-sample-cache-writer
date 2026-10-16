@@ -209,7 +209,7 @@ Bütün limitleri aynı anda artırmayın. Bu yaklaşım gerçek darboğazı giz
 ## Glowroot Agent Kullanımı
 
 Bu writer sade Java scheduler uygulamasıdır. REST server ve Spring Boot kullanmaz. Sınırlı
-`java-rust-glowroot-agent:0.5.4` bugün bu süreçte kendiliğinden başlamaz.
+`java-rust-glowroot-agent:0.6.0` bugün bu süreçte kendiliğinden başlamaz.
 
 Şu iki işlem tek başına yeterli değildir:
 
@@ -218,7 +218,7 @@ reactor.glowroot.enabled=true
 ```
 
 ```text
--javaagent:java-rust-glowroot-agent-0.5.4.jar
+-javaagent:java-rust-glowroot-agent-0.6.0.jar
 ```
 
 Bootstrap JAR yalnız başlangıç argümanlarını property'lere çevirir. Native agent çalışma katmanını oluşturmaz.
@@ -230,7 +230,7 @@ ve lifecycle ekleyerek sample'ın düşük bellek hedefini bozar.
 | Bu sample olduğu gibi sade Java kalacak | Kubernetes süreç/container ölçümleri ve writer logları | En küçük çalışma katmanı; Glowroot Central'a agent verisi gitmez |
 | Uygulama zaten başka bir nedenle Spring Boot | Non-web Spring starter ve `jvm` veya `sql` profili | Bounded agent kullanılabilir; Spring zaten mevcut olmalıdır |
 | Her JDBC ve Java metodunu otomatik izlemek gerekiyor | Tam Glowroot Java agent | Daha geniş özellik; daha yüksek memory ve CPU maliyeti |
-| Sade Java içinde sınırlı Rust agent gerekiyor | Spring bağımsız standalone çalışma katmanı | `0.5.4` sürümü bu sade Java entegrasyonunu içermez |
+| Sade Java içinde sınırlı Rust agent gerekiyor | Spring bağımsız standalone çalışma katmanı | `0.6.0` sürümü bu sade Java entegrasyonunu içermez |
 
 `java-rust-cache` Redis I/O işlemini Rust'ta yürütmeye devam eder. Ancak agent altyapısı başlamadığı
 için native Redis toplamları bu writer sürecinden Glowroot Central'a gönderilmez.
