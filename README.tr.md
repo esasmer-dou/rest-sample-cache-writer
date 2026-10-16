@@ -10,7 +10,7 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `rust-java-platform-parent:4.6.2`, `java-rust-cache:0.7.6`, `rust-sample-model:0.4.2`.
+Kullanılan sürümler: `rust-java-platform-parent:4.6.3`, `java-rust-cache:0.7.7`, `rust-sample-model:0.4.3`.
 
 ## Önce Bu Bölümü Okuyun
 
@@ -32,8 +32,8 @@ ve production sınıfı olarak pakete girmez.
 
 ## Güncel Kaynak Ayarları
 
-Bu kaynak ağacı platform parent `4.6.2` kullanır. Sample sürümü `0.6.5` olarak kalır.
-Bu hizalamayı kullanmak için kaynak kodu yeniden derleyin. Yayınlanmış sample paketi güncellenmedi.
+`0.6.6` sürümü platform parent `4.6.3` kullanır. Uygulamayı hizalanmış bağımlılıklarla
+yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.6.6.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
 
 - Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.
 - Generated projection registry bağlantısı tekrar eden projection lookup kodunu kaldırır.
@@ -326,4 +326,4 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 - [Türkçe PDF rehberi](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production ayarları](src/main/resources/config/production.properties)
 - [Advanced tuning ayarları](src/main/resources/config/advanced-tuning.properties)
-- [v0.6.5 sürüm notları](docs/RELEASE_NOTES_v0.6.5.tr.md)
+- [v0.6.6 sürüm notları](docs/RELEASE_NOTES_v0.6.6.tr.md)
