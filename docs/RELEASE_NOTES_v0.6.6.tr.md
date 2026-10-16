@@ -6,6 +6,9 @@ Kullanılan bağımlılıklar platform 4.6.3, cache 0.7.7, Dubbo 0.7.4 ve ortak 
 
 ## Güncelleme
 
+Release JAR'ı uygulama sınıflarını içerir. Tek başına çalışan bir runtime paketi değildir.
+`mvn exec:java` veya README'deki Docker image ile başlatın. Bu JAR için `java -jar` kullanmayın.
+
 Maven bağımlılığını veya parent sürümünü güncelleyin. Uygulamayı yeniden derleyin. Annotation processor sürümü platformla hizalı olsun. İşletim sistemi ve işlemcinize uygun paket içi native dosyayı kullanın. Eski sürümün dosyalarını yerinde değiştirmeyin.
 
 İş mantığı Java'da kalır. Runtime reflection veya yeni bir Java I/O katmanı eklenmez. Telemetri kendiliğinden açılmaz. ARM64 native dosyaları CI üzerinde derlenir. Bu sürümün uygulama kontrolleri x64 üzerinde yapılır. Bu patch için yeni ve evrensel bir RSS veya throughput kazanımı iddia edilmez.
