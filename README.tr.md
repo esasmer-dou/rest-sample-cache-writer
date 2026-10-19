@@ -12,7 +12,7 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `rust-java-platform-parent:4.7.0`, `java-rust-cache:0.8.0`, `rust-sample-model:0.4.4`.
+Kullanılan sürümler: `rust-java-platform-parent:4.7.1`, `java-rust-cache:0.8.0`, `rust-sample-model:0.4.4`.
 
 ## Önce Bu Bölümü Okuyun
 
@@ -34,7 +34,12 @@ ve production sınıfı olarak pakete girmez.
 
 ## Güncel Kaynak Ayarları
 
-`0.7.1` sürümü platform parent `4.7.0` kullanır. Uygulamayı hizalanmış bağımlılıklarla
+Bu güncelleme, platformu REST `4.7.1` ve isteğe bağlı agent `0.7.0` ile eşler.
+Seçtiğiniz bağımlılığın native dosyasını kullanın. Eski SO/DLL dosyalarını karıştırmayın.
+İş kodu, URL'ler ve ayar anahtarları değişmez. Telemetri varsayılan olarak kapalıdır.
+HTTP micro bellek testi, veritabanı işinde veya daha ayrıntılı profilde aynı maliyeti garanti etmez.
+
+`0.7.1` sürümü platform parent `4.7.1` kullanır. Uygulamayı hizalanmış bağımlılıklarla
 yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.7.1.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
 
 - Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.

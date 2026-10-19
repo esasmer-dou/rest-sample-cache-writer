@@ -12,7 +12,7 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `rust-java-platform-parent:4.7.0`, `java-rust-cache:0.8.0`, `rust-sample-model:0.4.4`.
+Current versions: `rust-java-platform-parent:4.7.1`, `java-rust-cache:0.8.0`, `rust-sample-model:0.4.4`.
 
 ## Read This First
 
@@ -33,7 +33,12 @@ generators stay on the compiler path and are not packaged as production classes.
 
 ## Current Checkout
 
-Version `0.7.1` uses platform parent `4.7.0`. Rebuild the application with the aligned
+This update aligns the platform with REST `4.7.1` and optional agent `0.7.0`.
+Use the native file packaged with the dependency you selected. Do not mix older SO/DLL files.
+Business code, URLs and configuration keys stay the same. Telemetry remains disabled by default.
+The HTTP micro memory gate does not guarantee the same overhead for a database job or a richer profile.
+
+Version `0.7.1` uses platform parent `4.7.1`. Rebuild the application with the aligned
 dependencies. See [release notes](docs/RELEASE_NOTES_v0.7.1.md). Runtime settings and URLs are unchanged.
 
 - The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
