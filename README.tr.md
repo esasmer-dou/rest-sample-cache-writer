@@ -34,8 +34,8 @@ ve production sınıfı olarak pakete girmez.
 
 ## Güncel Kaynak Ayarları
 
-`0.7.0` sürümü platform parent `4.7.0` kullanır. Uygulamayı hizalanmış bağımlılıklarla
-yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.7.0.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
+`0.7.1` sürümü platform parent `4.7.0` kullanır. Uygulamayı hizalanmış bağımlılıklarla
+yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.7.1.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
 
 - Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.
 - Generated projection registry bağlantısı tekrar eden projection lookup kodunu kaldırır.
@@ -238,36 +238,34 @@ Bütün limitleri aynı anda artırmayın. Bu yaklaşım gerçek darboğazı giz
 
 ## Glowroot Agent Kullanımı
 
-Bu writer sade Java scheduler uygulamasıdır. REST server ve Spring Boot kullanmaz. Sınırlı
-`java-rust-glowroot-agent:0.6.0` bugün bu süreçte kendiliğinden başlamaz.
+Varsayılan derleme agent bağımlılığı eklemez. İş mantığı ve mevcut ayarlar değişmez.
+Telemetri gerekiyorsa `glowroot` Maven profilini seçin.
 
-Şu iki işlem tek başına yeterli değildir:
-
-```properties
-reactor.glowroot.enabled=true
+```powershell
+$env:REACTOR_GLOWROOT_ENABLED="true"
+$env:REACTOR_GLOWROOT_PROFILE="micro"
+$env:REACTOR_GLOWROOT_COLLECTOR_ADDRESS="http://127.0.0.1:8181"
+$env:REACTOR_GLOWROOT_AGENT_ID="cache-writer-local"
+mvn -Pglowroot clean compile exec:java
 ```
 
-```text
--javaagent:java-rust-glowroot-agent-0.6.0.jar
-```
+Profil, `java-rust-glowroot-cache-adapter:0.7.0` paketini ekler.
+`TelemetryCacheWriterApplication` mevcut writer yaşam döngüsünü kullanır. Projection adları ayarlardan alınır. Collector UI'da `Scheduler` türünü ve `cache-refresh:<projection>` adını seçin.
 
-Bootstrap JAR yalnız başlangıç argümanlarını property'lere çevirir. Native agent çalışma katmanını oluşturmaz.
-Spring starter'ı yalnız telemetri almak için bu projeye eklemeyin. Bu, kullanılmayan Spring sınıfları
-ve lifecycle ekleyerek sample'ın düşük bellek hedefini bozar.
+Spring veya REST sunucusu eklenmez. Agent açıksa izole Rust exporter çalışır.
+Yeni Java executor oluşturulmaz. Payload, SQL değeri veya müşteri bilgisi gönderilmez.
+Normal kilit atlaması hata değildir. Başarısız sonuç ve exception hata sayılır. Yazma işlemi yeniden denenmez.
 
-| Durum | Doğru seçim | Sonuç |
-|---|---|---|
-| Bu sample olduğu gibi sade Java kalacak | Kubernetes süreç/container ölçümleri ve writer logları | En küçük çalışma katmanı; Glowroot Central'a agent verisi gitmez |
-| Uygulama zaten başka bir nedenle Spring Boot | Non-web Spring starter ve `jvm` veya `sql` profili | Bounded agent kullanılabilir; Spring zaten mevcut olmalıdır |
-| Her JDBC ve Java metodunu otomatik izlemek gerekiyor | Tam Glowroot Java agent | Daha geniş özellik; daha yüksek memory ve CPU maliyeti |
-| Sade Java içinde sınırlı Rust agent gerekiyor | Spring bağımsız standalone çalışma katmanı | `0.6.0` sürümü bu sade Java entegrasyonunu içermez |
+`REACTOR_GLOWROOT_ENABLED=false` ile agent'ı kapatın.
+Bağımlılığı da çıkarmak için `glowroot` profilini seçmeden derleyin.
+Bootstrap JAR'ını tek başına eklemek bu yaşam döngüsünü başlatmaz.
 
-`java-rust-cache` Redis I/O işlemini Rust'ta yürütmeye devam eder. Ancak agent altyapısı başlamadığı
-için native Redis toplamları bu writer sürecinden Glowroot Central'a gönderilmez.
+Maven `settings.xml` dosyasına `github-glowroot` kimlikli server ekleyin.
+Geçerli `read:packages` token'ı kullanın. SSH Maven paketlerini indirmez.
+`micro` ile başlayın. HTTP testindeki 3 MiB boşta medyan sınırı, bu uygulamanın
+her iş yükünde aynı maliyetle çalışacağının garantisi değildir.
 
-Uygulama gerçekten Spring Boot non-web process'e dönüştürülürse kurulum için
-[`java-rust-glowroot-agent`](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/master/README.tr.md#2-web-olmayan-uygulamalar)
-bölümünü kullanın. Yalnız telemetri için bu dönüşümü yapmayın.
+[Kurulum ve profil ayrıntıları](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/v0.7.0/docs/functional-operations.tr.md)
 
 ## Birden Fazla Replica
 
@@ -356,4 +354,4 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 - [Türkçe PDF rehberi](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production ayarları](src/main/resources/config/production.properties)
 - [Advanced tuning ayarları](src/main/resources/config/advanced-tuning.properties)
-- [v0.7.0 sürüm notları](docs/RELEASE_NOTES_v0.7.0.tr.md)
+- [v0.7.1 sürüm notları](docs/RELEASE_NOTES_v0.7.1.tr.md)

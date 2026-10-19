@@ -33,8 +33,8 @@ generators stay on the compiler path and are not packaged as production classes.
 
 ## Current Checkout
 
-Version `0.7.0` uses platform parent `4.7.0`. Rebuild the application with the aligned
-dependencies. See [release notes](docs/RELEASE_NOTES_v0.7.0.md). Runtime settings and URLs are unchanged.
+Version `0.7.1` uses platform parent `4.7.0`. Rebuild the application with the aligned
+dependencies. See [release notes](docs/RELEASE_NOTES_v0.7.1.md). Runtime settings and URLs are unchanged.
 
 - The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
 - Generated projection registry wiring replaces repeated projection lookup code.
@@ -237,36 +237,34 @@ Do not increase all limits together. That hides the real bottleneck and increase
 
 ## Glowroot Agent Use
 
-This writer is a plain Java scheduled application. It does not use a REST server or Spring Boot. The
-bounded `java-rust-glowroot-agent:0.6.0` does not start automatically in this process today.
+The default build adds no agent dependency. Business logic and existing settings stay unchanged.
+Choose the optional `glowroot` Maven profile when this process needs telemetry.
 
-Neither of these actions is sufficient on its own:
-
-```properties
-reactor.glowroot.enabled=true
+```powershell
+$env:REACTOR_GLOWROOT_ENABLED="true"
+$env:REACTOR_GLOWROOT_PROFILE="micro"
+$env:REACTOR_GLOWROOT_COLLECTOR_ADDRESS="http://127.0.0.1:8181"
+$env:REACTOR_GLOWROOT_AGENT_ID="cache-writer-local"
+mvn -Pglowroot clean compile exec:java
 ```
 
-```text
--javaagent:java-rust-glowroot-agent-0.6.0.jar
-```
+The profile adds `java-rust-glowroot-cache-adapter:0.7.0`.
+`TelemetryCacheWriterApplication` uses the existing writer lifecycle. Projection names come from current settings. Select transaction type `Scheduler`, name `cache-refresh:<projection>` in Collector UI.
 
-The bootstrap JAR only maps startup arguments to properties. It does not create the native agent
-runtime. Do not add the Spring starter only to obtain telemetry. That would add unused Spring classes
-and lifecycle state and would break the sample's low-memory purpose.
+No Spring or REST server is added. Enabled telemetry uses the isolated Rust exporter.
+No Java executor is created. Payloads, SQL values and customer data are not sent.
+A normal lock skip is not an error. Failed results and exceptions count as errors. Writes are not retried.
 
-| Situation | Correct choice | Result |
-|---|---|---|
-| Keep this sample as plain Java | Kubernetes process/container metrics and writer logs | Smallest runtime; no agent data is sent to Glowroot Central |
-| The application already uses Spring Boot for another reason | Non-web Spring starter with `jvm` or `sql` | Bounded agent is available because Spring already exists |
-| Every JDBC call and Java method needs automatic instrumentation | Full Glowroot Java agent | Broader features with higher memory and CPU cost |
-| Plain Java needs the bounded Rust agent | A Spring-independent standalone runtime | Release `0.6.0` does not include this plain-Java integration |
+Set `REACTOR_GLOWROOT_ENABLED=false` to turn telemetry off.
+Build without the `glowroot` profile to remove its dependencies as well.
+Adding the bootstrap JAR alone does not start this lifecycle.
 
-`java-rust-cache` still performs Redis I/O in Rust. However, because the agent engine is not started,
-native Redis aggregates from this writer are not exported to Glowroot Central.
+Add a server with id `github-glowroot` to Maven `settings.xml`.
+Use a valid `read:packages` token. SSH does not download Maven packages.
+Start with `micro`. The HTTP gate's 3 MiB steady paired-median bound is not
+a per-load memory guarantee for this application.
 
-If the application is deliberately converted into a non-web Spring Boot process, follow the
-[`java-rust-glowroot-agent`](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/master/README.md#2-non-web-applications)
-guide. Do not make that conversion only for telemetry.
+[Setup and profile details](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/v0.7.0/docs/functional-operations.md)
 
 ## Multiple Replicas
 
@@ -355,4 +353,4 @@ Add these server IDs to `~/.m2/settings.xml`:
 - [Turkish PDF guide](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production settings](src/main/resources/config/production.properties)
 - [Advanced tuning](src/main/resources/config/advanced-tuning.properties)
-- [v0.7.0 release notes](docs/RELEASE_NOTES_v0.7.0.md)
+- [v0.7.1 release notes](docs/RELEASE_NOTES_v0.7.1.md)
