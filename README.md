@@ -2,6 +2,8 @@
 
 [English](README.md) | [Türkçe](README.tr.md)
 
+New usage guide: [New usage examples](docs/functional-operations.md).
+
 A small scheduled application that reads PostgreSQL and publishes ready JSON snapshots to Redis.
 
 - Java owns SQL, business mapping, and scheduling decisions.
@@ -10,7 +12,7 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `rust-java-platform-parent:4.6.3`, `java-rust-cache:0.7.7`, `rust-sample-model:0.4.3`.
+Current versions: `rust-java-platform-parent:4.7.0`, `java-rust-cache:0.8.0`, `rust-sample-model:0.4.4`.
 
 ## Read This First
 
@@ -31,8 +33,8 @@ generators stay on the compiler path and are not packaged as production classes.
 
 ## Current Checkout
 
-Version `0.6.6` uses platform parent `4.6.3`. Rebuild the application with the aligned
-dependencies. See [release notes](docs/RELEASE_NOTES_v0.6.6.md). Runtime settings and URLs are unchanged.
+Version `0.7.0` uses platform parent `4.7.0`. Rebuild the application with the aligned
+dependencies. See [release notes](docs/RELEASE_NOTES_v0.7.0.md). Runtime settings and URLs are unchanged.
 
 - The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
 - Generated projection registry wiring replaces repeated projection lookup code.
@@ -172,6 +174,34 @@ The writer is intentionally write-only:
 ```properties
 reactor.cache.redis.access-mode=write-only
 ```
+
+## Small Linux/OpenJ9 Pods
+
+You can test `-XX:-TransparentHugePage` as an optional Linux/OpenJ9 setting. It is
+not enabled by default in this sample image. With it, OpenJ9 no longer asks Linux
+to promote its allocations to huge pages. This can reduce resident memory without
+reducing the heap limit or disabling JIT. It is not a heap cap and does not change
+the node's global settings. Native allocations can still use huge pages.
+
+Do not copy a consumer's memory setting to the writer without testing it.
+The writer has a different compilation and refresh workload. This option can
+also increase peak RSS; keep it only if repeated refresh tests show a benefit.
+
+Overriding `JAVA_TOOL_OPTIONS` replaces the image's entire value. For the existing
+small-pod image, keep these options together:
+
+```yaml
+env:
+  - name: JAVA_TOOL_OPTIONS
+    value: >-
+      -Xms24m -Xmx96m -Xss192k -Xgc:threads=1
+      -XX:ActiveProcessorCount=1 -Xtune:virtualized -XX:-TransparentHugePage
+```
+
+This recipe is for OpenJ9. Scheduler threads, refresh intervals, Redis batches,
+TTL and Hikari limits are unchanged. Compare refresh duration and RSS over the
+same number of successful refreshes. Lower RSS is not a gain if publishing slows
+down or misses its interval.
 
 ## Configuration
 
@@ -325,4 +355,4 @@ Add these server IDs to `~/.m2/settings.xml`:
 - [Turkish PDF guide](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production settings](src/main/resources/config/production.properties)
 - [Advanced tuning](src/main/resources/config/advanced-tuning.properties)
-- [v0.6.6 release notes](docs/RELEASE_NOTES_v0.6.6.md)
+- [v0.7.0 release notes](docs/RELEASE_NOTES_v0.7.0.md)

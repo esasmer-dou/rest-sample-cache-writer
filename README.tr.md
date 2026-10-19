@@ -2,6 +2,8 @@
 
 [English](README.md) | [Türkçe](README.tr.md)
 
+Yeni kullanım rehberi: [Yeni kullanım örnekleri](docs/functional-operations.tr.md).
+
 PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir scheduler uygulamasıdır.
 
 - SQL, iş dönüşümü ve scheduler kararları Java'da kalır.
@@ -10,7 +12,7 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `rust-java-platform-parent:4.6.3`, `java-rust-cache:0.7.7`, `rust-sample-model:0.4.3`.
+Kullanılan sürümler: `rust-java-platform-parent:4.7.0`, `java-rust-cache:0.8.0`, `rust-sample-model:0.4.4`.
 
 ## Önce Bu Bölümü Okuyun
 
@@ -32,8 +34,8 @@ ve production sınıfı olarak pakete girmez.
 
 ## Güncel Kaynak Ayarları
 
-`0.6.6` sürümü platform parent `4.6.3` kullanır. Uygulamayı hizalanmış bağımlılıklarla
-yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.6.6.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
+`0.7.0` sürümü platform parent `4.7.0` kullanır. Uygulamayı hizalanmış bağımlılıklarla
+yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.7.0.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
 
 - Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.
 - Generated projection registry bağlantısı tekrar eden projection lookup kodunu kaldırır.
@@ -173,6 +175,34 @@ Writer bilinçli olarak yalnızca yazma yapar:
 ```properties
 reactor.cache.redis.access-mode=write-only
 ```
+
+## Küçük Linux/OpenJ9 Podları
+
+Linux/OpenJ9 ortamında `-XX:-TransparentHugePage` seçeneğini deneyebilirsiniz.
+Consumer'da yarar sağlayan bir ayarı writer'a ölçmeden taşımayın.
+Writer'ın derleme ve yenileme yükü farklıdır. Bu seçenek tepe RSS değerini de
+artırabilir. Yalnız tekrarlı yenileme testlerinde yarar görürseniz kullanın.
+Bu seçenek sample image'ında varsayılan olarak açık değildir. Etkinleştirdiğinizde
+OpenJ9, ayırdığı bellek için Linux'tan otomatik büyük sayfa istemez.
+Heap limitini düşürmeden ve JIT'i kapatmadan
+fiziksel bellek kullanımını azaltabilir. Bu seçenek bir heap limiti değildir.
+Sunucunun genel ayarını değiştirmez. Native alanlar yine büyük sayfa kullanabilir.
+
+`JAVA_TOOL_OPTIONS` verirseniz image'daki değerin tamamını değiştirirsiniz.
+Mevcut küçük pod image'ı için seçenekleri birlikte koruyun:
+
+```yaml
+env:
+  - name: JAVA_TOOL_OPTIONS
+    value: >-
+      -Xms24m -Xmx96m -Xss192k -Xgc:threads=1
+      -XX:ActiveProcessorCount=1 -Xtune:virtualized -XX:-TransparentHugePage
+```
+
+Bu reçete OpenJ9 içindir. Scheduler thread'leri, yenileme aralığı, Redis batch
+boyutu, TTL ve Hikari limitleri değişmez. Aynı sayıda başarılı yenileme için süreyi
+ve RSS'i karşılaştırın. Yayınlama yavaşlıyorsa veya yenileme aralığını kaçırıyorsa
+tek başına düşük RSS yeterli değildir.
 
 ## Konfigürasyon
 
@@ -326,4 +356,4 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 - [Türkçe PDF rehberi](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production ayarları](src/main/resources/config/production.properties)
 - [Advanced tuning ayarları](src/main/resources/config/advanced-tuning.properties)
-- [v0.6.6 sürüm notları](docs/RELEASE_NOTES_v0.6.6.tr.md)
+- [v0.7.0 sürüm notları](docs/RELEASE_NOTES_v0.7.0.tr.md)

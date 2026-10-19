@@ -2,19 +2,20 @@ package com.reactor.sample.cache.writer.json;
 
 import com.reactor.sample.model.customer.CustomerCounts;
 import com.reactor.sample.model.customer.SampleCustomer;
-import com.reactor.rust.cache.json.JsonWriter;
+import com.reactor.rust.cache.json.Utf8JsonWriter;
+import com.reactor.rust.cache.json.Utf8JsonBuffer;
 
 import java.time.Instant;
 import java.util.List;
 
-public final class CustomerJsonWriter extends JsonWriter {
+public final class CustomerJsonWriter extends Utf8JsonWriter {
 
     public byte[] customer(SampleCustomer customer) {
         return customerDetail(customer);
     }
 
     public byte[] customerDetail(SampleCustomer customer) {
-        StringBuilder json = json(768);
+        Utf8JsonBuffer json = json(768);
         appendCustomerDetail(json, customer);
         return utf8(json);
     }
@@ -24,7 +25,7 @@ public final class CustomerJsonWriter extends JsonWriter {
     }
 
     public byte[] customerSummaries(String indexName, String indexValue, List<SampleCustomer> customers) {
-        StringBuilder json = json(Math.max(128, customers.size() * 256));
+        Utf8JsonBuffer json = json(Math.max(128, customers.size() * 256));
         json.append('{');
         json.append("\"index\":{");
         stringField(json, "name", indexName).append(',');
@@ -37,7 +38,7 @@ public final class CustomerJsonWriter extends JsonWriter {
     }
 
     public byte[] campaignCandidates(String campaignCode, List<SampleCustomer> customers) {
-        StringBuilder json = json(Math.max(160, customers.size() * 280));
+        Utf8JsonBuffer json = json(Math.max(160, customers.size() * 280));
         json.append('{');
         stringField(json, "campaignCode", campaignCode).append(',');
         json.append("\"selection\":{");
@@ -52,7 +53,7 @@ public final class CustomerJsonWriter extends JsonWriter {
 
     public byte[] meta(CustomerCounts counts, int versionRows, Instant generatedAt,
             List<String> segments, List<String> statuses) {
-        StringBuilder json = json(320);
+        Utf8JsonBuffer json = json(320);
         json.append('{');
         field(json, "total", counts.total()).append(',');
         field(json, "active", counts.active()).append(',');
@@ -75,7 +76,7 @@ public final class CustomerJsonWriter extends JsonWriter {
         return meta(counts, versionRows, generatedAt, List.of(), List.of());
     }
 
-    private void appendCustomerDetail(StringBuilder json, SampleCustomer customer) {
+    private void appendCustomerDetail(Utf8JsonBuffer json, SampleCustomer customer) {
         json.append('{');
         json.append("\"customer\":{");
         field(json, "id", customer.id()).append(',');
@@ -108,7 +109,7 @@ public final class CustomerJsonWriter extends JsonWriter {
         json.append("}}");
     }
 
-    private void appendCustomerSummaryArray(StringBuilder json, List<SampleCustomer> customers) {
+    private void appendCustomerSummaryArray(Utf8JsonBuffer json, List<SampleCustomer> customers) {
         json.append('[');
         for (int i = 0; i < customers.size(); i++) {
             if (i > 0) {
@@ -119,7 +120,7 @@ public final class CustomerJsonWriter extends JsonWriter {
         json.append(']');
     }
 
-    private void appendCustomerSummary(StringBuilder json, SampleCustomer customer) {
+    private void appendCustomerSummary(Utf8JsonBuffer json, SampleCustomer customer) {
         json.append('{');
         field(json, "id", customer.id()).append(',');
         stringField(json, "customerNo", customer.customerNo()).append(',');
@@ -135,7 +136,7 @@ public final class CustomerJsonWriter extends JsonWriter {
         json.append('}');
     }
 
-    private StringBuilder appendAddress(StringBuilder json, String type, SampleCustomer customer) {
+    private Utf8JsonBuffer appendAddress(Utf8JsonBuffer json, String type, SampleCustomer customer) {
         json.append('{');
         stringField(json, "type", type).append(',');
         stringField(json, "city", city(customer)).append(',');
@@ -145,7 +146,7 @@ public final class CustomerJsonWriter extends JsonWriter {
         return json;
     }
 
-    private StringBuilder appendOrder(StringBuilder json, SampleCustomer customer, int index) {
+    private Utf8JsonBuffer appendOrder(Utf8JsonBuffer json, SampleCustomer customer, int index) {
         json.append('{');
         stringField(json, "orderNo", orderNo(customer, index)).append(',');
         stringField(json, "status", index == 0 ? "DELIVERED" : "PREPARING").append(',');

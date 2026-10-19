@@ -11,8 +11,18 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WriterConfigurationTest {
+
+    @Test
+    void smallPodImageKeepsExistingHeapAndJitDefaults() throws Exception {
+        String dockerfile = Files.readString(Path.of("docker", "images", "Dockerfile.jlink.workspace"));
+        assertTrue(dockerfile.contains("-Xms24m -Xmx96m"));
+        assertTrue(dockerfile.contains("-XX:ActiveProcessorCount=1"));
+        assertFalse(dockerfile.contains("-Xnojit"));
+    }
 
     private static final String CONFIG = "rest-sample-cache-writer.properties";
 
