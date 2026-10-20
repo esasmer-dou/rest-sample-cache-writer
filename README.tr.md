@@ -12,7 +12,7 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `rust-java-platform-parent:4.7.1`, `java-rust-cache:0.8.0`, `rust-sample-model:0.4.4`.
+Kullanılan sürümler: `rust-java-platform-parent:4.7.1`, `java-rust-cache:0.8.1`, `rust-sample-model:0.4.4`.
 
 ## Önce Bu Bölümü Okuyun
 

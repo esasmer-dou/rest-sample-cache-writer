@@ -12,7 +12,7 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `rust-java-platform-parent:4.7.1`, `java-rust-cache:0.8.0`, `rust-sample-model:0.4.4`.
+Current versions: `rust-java-platform-parent:4.7.1`, `java-rust-cache:0.8.1`, `rust-sample-model:0.4.4`.
 
 ## Read This First
 
