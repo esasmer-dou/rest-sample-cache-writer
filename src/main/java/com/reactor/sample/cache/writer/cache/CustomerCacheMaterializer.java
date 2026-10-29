@@ -10,7 +10,6 @@ import com.reactor.rust.cache.scheduler.ProjectionRefreshScheduler;
 import com.reactor.rust.cache.versioned.VersionedJsonCacheWriter.SnapshotResult;
 import com.reactor.sample.cache.writer.db.PostgresCustomerRepository;
 import com.reactor.sample.cache.writer.json.CustomerJsonWriter;
-import com.reactor.sample.model.customer.CustomerCounts;
 import com.reactor.sample.model.customer.SampleCustomer;
 import com.reactor.sample.model.cache.CustomerProjection;
 
@@ -55,33 +54,29 @@ public final class CustomerCacheMaterializer implements ProjectionRefreshSchedul
     }
 
     SnapshotResult writeDetail(ProjectionTarget projection) throws Exception {
-        return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
-                repository.forEachCustomerPage(pageSize, page -> {
-                    for (SampleCustomer customer : page) {
-                        byte[] detail = jsonWriter.customerDetail(customer);
-                        snapshot.putById(customer.id(), detail);
-                        snapshot.putIndex("customer-no", customer.customerNo(), detail);
-                    }
-                }));
+        return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot -> {
+            var encodeDetail = jsonWriter.detailEncoder();
+            repository.forEachCustomerPage(pageSize, page -> {
+                for (SampleCustomer customer : page) {
+                    byte[] detail = encodeDetail.apply(customer);
+                    snapshot.putById(customer.id(), detail);
+                    snapshot.putIndex("customer-no", customer.customerNo(), detail);
+                }
+            });
+        });
     }
 
     SnapshotResult writeSegment(ProjectionTarget projection) throws Exception {
-        List<String> segments = repository.findSegments();
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot -> {
-            for (String segment : segments) {
-                List<SampleCustomer> customers = repository.findCustomersBySegment(segment, segmentIndexLimit);
-                snapshot.putIndex("segment", segment, jsonWriter.customerSummaries("segment", segment, customers));
-            }
+            repository.forEachSegment(segmentIndexLimit, (segment, customers) ->
+                snapshot.putIndex("segment", segment, jsonWriter.customerSummaries("segment", segment, customers)));
         });
     }
 
     SnapshotResult writeStatus(ProjectionTarget projection) throws Exception {
-        List<String> statuses = repository.findStatuses();
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot -> {
-            for (String status : statuses) {
-                List<SampleCustomer> customers = repository.findCustomersByStatus(status, statusIndexLimit);
-                snapshot.putIndex("status", status, jsonWriter.customerSummaries("status", status, customers));
-            }
+            repository.forEachStatus(statusIndexLimit, (status, customers) ->
+                snapshot.putIndex("status", status, jsonWriter.customerSummaries("status", status, customers)));
         });
     }
 
@@ -92,11 +87,10 @@ public final class CustomerCacheMaterializer implements ProjectionRefreshSchedul
     }
 
     SnapshotResult writeMeta(ProjectionTarget projection) throws Exception {
-        CustomerCounts counts = repository.countCustomersByStatus();
-        List<String> segments = repository.findSegments();
-        List<String> statuses = repository.findStatuses();
+        var metadata = repository.projectionMetadata();
         return projection.writer().refreshSnapshot(projection.ttlMillis(), snapshot ->
-                snapshot.putMeta(jsonWriter.meta(counts, counts.total(), Instant.now(), segments, statuses)));
+                snapshot.putMeta(jsonWriter.meta(metadata.counts(), metadata.counts().total(), Instant.now(),
+                        metadata.segments(), metadata.statuses())));
     }
 
 }

@@ -2,6 +2,13 @@
 
 [English](README.md) | [Türkçe](README.tr.md)
 
+## 0.8.0 İle Başlayın
+
+Projection işleri, hazırlanmış JSON alan adlarını ve sınırlı JDBC/Redis işlemlerini kullanır. Projection bazlı zamanlama, kilit, fencing ve TTL koruması korunur. Writer, veritabanından Redis'e yayın yapar; REST okuma yapmaz.
+
+[Kullanım rehberi](docs/functional-operations.md) · [Sürüm notları](docs/RELEASE_NOTES_v0.8.0.md)
+
+
 Yeni kullanım rehberi: [Yeni kullanım örnekleri](docs/functional-operations.tr.md).
 
 PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir scheduler uygulamasıdır.
@@ -12,7 +19,7 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `rust-java-platform-parent:4.7.1`, `java-rust-cache:0.8.1`, `rust-sample-model:0.4.4`.
+Kullanılan sürümler: `rust-java-platform-parent:4.8.0`, `java-rust-cache:0.9.0`, `rust-sample-model:0.5.0`.
 
 ## Önce Bu Bölümü Okuyun
 
@@ -34,13 +41,13 @@ ve production sınıfı olarak pakete girmez.
 
 ## Güncel Kaynak Ayarları
 
-Bu güncelleme, platformu REST `4.7.1` ve isteğe bağlı agent `0.7.0` ile eşler.
+Bu güncelleme, platformu REST `4.8.0` ve isteğe bağlı agent `0.7.1` ile eşler.
 Seçtiğiniz bağımlılığın native dosyasını kullanın. Eski SO/DLL dosyalarını karıştırmayın.
 İş kodu, URL'ler ve ayar anahtarları değişmez. Telemetri varsayılan olarak kapalıdır.
 HTTP micro bellek testi, veritabanı işinde veya daha ayrıntılı profilde aynı maliyeti garanti etmez.
 
-`0.7.1` sürümü platform parent `4.7.1` kullanır. Uygulamayı hizalanmış bağımlılıklarla
-yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.7.1.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
+`0.8.0` sürümü platform parent `4.8.0` kullanır. Uygulamayı hizalanmış bağımlılıklarla
+yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.8.0.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
 
 - Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.
 - Generated projection registry bağlantısı tekrar eden projection lookup kodunu kaldırır.
@@ -149,6 +156,49 @@ sample.writer.projections=campaign,meta
 
 ## Çalışma Aralığı, TTL ve Kilit
 
+Henüz yayımlanmayan kaynakta bu sample,
+`reactor.cache.redis.snapshot-batch-enabled=true` ayarını kullanır.
+Kütüphanenin kendi varsayılanı kapalı kalır. Uygun native dosya ile
+standalone Redis ve Sentinel'de küçük bir yenileme iki Redis yazma çağrısıyla
+tamamlanır. İlk çağrı kilidi ve fencing token'ı alır. İkinci çağrı son veri
+partisini yazar, sürümü yayınlar ve kilidi bırakır. Cluster mevcut slot uyumlu
+yolu kullanır. Eski native dosyalarda da mevcut yol çalışmaya devam eder.
+Anahtarlar, TTL, kilit sahibi ve fencing kontrolleri korunur. Büyük snapshot'lar
+sınırlı partilerle yazılır. Son parti 1 MiB'ı aşarsa normal toplu yazma kullanılır.
+Yayın anında Redis'teki kilit sahibi kontrol edilir. Yalnız yerel bir işarete
+güvenilmez. Sonucu belirsiz ağ hataları sessizce tekrarlanmaz. Ek worker veya
+bellekte tutulan payload havuzu eklenmez.
+
+Eski yayın yolunu seçmek için `REACTOR_CACHE_REDIS_SNAPSHOT_BATCH_ENABLED=false`
+verin. SQL okumaları ve yayınlanan JSON değişmez. Küçük bir yenileme için iki
+yerine beş Redis yazma çağrısı yapılır. Kendi ortamınızda işin toplam süresini
+ölçün. Çağrı sayısının azalması, belirli bir p99 değerini garanti etmez.
+
+Güncel native kaynak bu iki sabit Lua programını `EVALSHA` ile çağırır. Redis'te
+saklanan şey programdır; müşteri verisi veya SQL sonucu değildir. Program
+bulunamazsa bir kez `EVAL` gönderilir. Sonraki çağrılar programın özetini taşır.
+Redis, `EVALSHA` komutuna izin vermiyorsa mevcut `EVAL` yolu korunur. Timeout
+ve Lua çalışma hataları yeniden denenmez. Cache metriklerindeki
+`snapshot_script_cache_misses` ve `snapshot_script_acl_fallbacks` bu durumları
+gösterir. Gönderilen byte sayısına ek ilk çağrılar da dahildir. `write_calls`
+iki mantıksal yazma işlemini sayar; script cache için ek ağ çağrılarını saymaz.
+
+
+`meta` projection'ı sayıları, segment adlarını ve durum adlarını tek SQL sorgusunda
+okur. Bu üç bilgi aynı veritabanı görünümünden gelir. Segment sınırı 64, durum
+sınırı 32 olarak kalır. Boş adlar bu sınırlar uygulandıktan sonra çıkarılır.
+JDBC dizileri ve bağlantı okuma sonunda bırakılır. Ek pool, thread, cache veya
+property gerekmez. Redis kilidi ve fencing kontrolleri korunur. Azalan şey
+veritabanına gidiş geliş sayısıdır; tutarlılık kontrolü değildir.
+
+Segment ve durum yenilemesi, her projection için sınırlı bir gruplu sorgu kullanır.
+Kaynak kodda, tamamı en fazla 64 satır olan sonuç tek autocommit SELECT ile okunur.
+Daha büyük sonuçlarda sınırlı ön okumanın ardından mevcut DB cursor'ı kullanılır.
+Sorgu hem grup sayısını hem de grup başına müşteri sayısını sınırlar.
+Yalnız o anda yazılan grup Java nesnelerine dönüştürülür. Her segment veya durum için
+ayrı sorgu çalıştırılmaz. Detay yenilemesi, ID üzerinden sayfalama yapmaya devam eder.
+JSON biçimi, TTL, replica kilitleri ve snapshot'ın atomik yayını değişmez.
+
 Her projection bağımsız çalışır.
 
 ```properties
@@ -254,7 +304,7 @@ $env:REACTOR_GLOWROOT_AGENT_ID="cache-writer-local"
 mvn -Pglowroot clean compile exec:java
 ```
 
-Profil, `java-rust-glowroot-cache-adapter:0.7.0` paketini ekler.
+Profil, `java-rust-glowroot-cache-adapter:0.7.1` paketini ekler.
 `TelemetryCacheWriterApplication` mevcut writer yaşam döngüsünü kullanır. Projection adları ayarlardan alınır. Collector UI'da `Scheduler` türünü ve `cache-refresh:<projection>` adını seçin.
 
 Spring veya REST sunucusu eklenmez. Agent açıksa izole Rust exporter çalışır.
@@ -270,7 +320,7 @@ Geçerli `read:packages` token'ı kullanın. SSH Maven paketlerini indirmez.
 `micro` ile başlayın. HTTP testindeki 3 MiB boşta medyan sınırı, bu uygulamanın
 her iş yükünde aynı maliyetle çalışacağının garantisi değildir.
 
-[Kurulum ve profil ayrıntıları](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/v0.7.0/docs/functional-operations.tr.md)
+[Kurulum ve profil ayrıntıları](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/v0.7.1/docs/functional-operations.tr.md)
 
 ## Birden Fazla Replica
 
@@ -341,6 +391,39 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 - Publish süresi, schedule gecikmesi, DB pool wait, Redis p99, RSS ve saklanan sürümleri ölçün.
 - Yalnız telemetri için Spring Boot veya REST runtime eklemeyin.
 
+## Sık Yenilemelerde Başlangıç Aralığını Koruyun
+
+Kaynak koddaki repository, segment ve durum sorguları için sınırlı bir plan
+tanımlar. Sonucun tamamı en fazla 64 satırsa tek autocommit SELECT kullanılır.
+Daha büyük sonuçlarda mevcut streaming cursor çalışır. Probe satırları
+yayımlanmaz veya cursor'ın veri grubuna eklenmez. Veritabanı sonucu cache'lenmez.
+Sınır aşılırsa bir ek sınırlı okuma yapılır. Sonuçlarınız genellikle büyükse
+`forEachQueryGroup` metodunun String SQL alan önceki overload'unu kullanın.
+Doğrulama, JSON üretimi ve Redis fencing kontrolü Java'da kalır.
+
+Kısa interval kullanıyorsanız `sample.writer.phase-anchored=true` seçeneği,
+projection'ların başlangıç aralığını korur. Varsayılan `false`, her iş bittikten
+sonra tam interval bekler. İş süreleri farklıysa projection'lar zamanla aynı ana kayabilir.
+
+```properties
+sample.writer.phase-anchored=true
+sample.writer.interval-ms=500
+sample.writer.detail.initial-delay-ms=2000
+sample.writer.segment.initial-delay-ms=2100
+sample.writer.status.initial-delay-ms=2200
+sample.writer.campaign.initial-delay-ms=2300
+sample.writer.meta.initial-delay-ms=2400
+```
+
+Kaçırılan zaman dilimleri peş peşe çalıştırılmaz. Mevcut thread sınırı ve projection
+kilitleri korunur. Ek thread veya kuyruk açılmaz. TTL; interval, beklenen iş/kesinti
+süresi ve güvenlik payının toplamından uzun olmalıdır. İş bittikten sonra tam bir
+dinlenme aralığı gerekiyorsa varsayılanı koruyun. Bu seçenek yalnız zamanlamayı
+değiştirir. DB satırları, JSON içeriği ve yayın tutarlılığı değişmez.
+
+Bu kaynak kod seçeneği p99 düzeltmesi veya yeni production varsayılanı değildir.
+Açmadan önce işin çalışma süresini ayrıca ölçün.
+
 ## Kısa Sözlük
 
 | Terim | Basit anlamı |
@@ -359,4 +442,4 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 - [Türkçe PDF rehberi](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production ayarları](src/main/resources/config/production.properties)
 - [Advanced tuning ayarları](src/main/resources/config/advanced-tuning.properties)
-- [v0.7.1 sürüm notları](docs/RELEASE_NOTES_v0.7.1.tr.md)
+- [v0.8.0 sürüm notları](docs/RELEASE_NOTES_v0.8.0.tr.md)

@@ -2,6 +2,13 @@
 
 [English](README.md) | [Türkçe](README.tr.md)
 
+## Start With 0.8.0
+
+Projection jobs reuse prepared JSON field names and bounded JDBC/Redis work. Per-projection schedules, locks, fencing and TTL safety remain intact. The writer still owns DB-to-Redis publication, not REST reads.
+
+[Usage guide](docs/functional-operations.md) · [Release notes](docs/RELEASE_NOTES_v0.8.0.md)
+
+
 New usage guide: [New usage examples](docs/functional-operations.md).
 
 A small scheduled application that reads PostgreSQL and publishes ready JSON snapshots to Redis.
@@ -12,7 +19,7 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `rust-java-platform-parent:4.7.1`, `java-rust-cache:0.8.1`, `rust-sample-model:0.4.4`.
+Current versions: `rust-java-platform-parent:4.8.0`, `java-rust-cache:0.9.0`, `rust-sample-model:0.5.0`.
 
 ## Read This First
 
@@ -33,13 +40,13 @@ generators stay on the compiler path and are not packaged as production classes.
 
 ## Current Checkout
 
-This update aligns the platform with REST `4.7.1` and optional agent `0.7.0`.
+This update aligns the platform with REST `4.8.0` and optional agent `0.7.1`.
 Use the native file packaged with the dependency you selected. Do not mix older SO/DLL files.
 Business code, URLs and configuration keys stay the same. Telemetry remains disabled by default.
 The HTTP micro memory gate does not guarantee the same overhead for a database job or a richer profile.
 
-Version `0.7.1` uses platform parent `4.7.1`. Rebuild the application with the aligned
-dependencies. See [release notes](docs/RELEASE_NOTES_v0.7.1.md). Runtime settings and URLs are unchanged.
+Version `0.8.0` uses platform parent `4.8.0`. Rebuild the application with the aligned
+dependencies. See [release notes](docs/RELEASE_NOTES_v0.8.0.md). Runtime settings and URLs are unchanged.
 
 - The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
 - Generated projection registry wiring replaces repeated projection lookup code.
@@ -148,6 +155,47 @@ sample.writer.projections=campaign,meta
 
 ## Schedule, TTL, and Lock
 
+The unpublished source checkout enables `reactor.cache.redis.snapshot-batch-enabled=true`
+in this sample. The library's own default is still off. On standalone Redis and
+Sentinel, a matching native library completes a small refresh in two Redis write
+calls: acquire the lease and fencing token, then write the
+last batch, publish its version and release the lease. Cluster keeps the existing
+slot-aware path. Older native libraries keep the existing path as well.
+Keys, TTL, owner checks and fencing are preserved. Larger snapshots still flush
+bounded batches; a tail above 1 MiB uses the ordinary batch writer. The final
+publish verifies the remote lock owner, not just a local flag. Ambiguous network
+failures are not silently replayed. No extra worker or retained payload pool is added.
+
+To use the legacy publication path, set `REACTOR_CACHE_REDIS_SNAPSHOT_BATCH_ENABLED=false`.
+The SQL reads and published JSON stay the same. The difference is five Redis write
+calls instead of two for a small refresh. Measure the end-to-end job duration in
+your deployment; fewer calls do not guarantee a specific p99.
+
+The current native source uses `EVALSHA` for these two fixed scripts. This caches
+the Lua program in Redis, not customer data or SQL results. A missing script
+uses `EVAL` once; subsequent calls send its digest. Explicit denial of the
+`EVALSHA` command also keeps the existing `EVAL` path. Timeouts and Lua runtime
+errors are not replayed. `snapshot_script_cache_misses` and
+`snapshot_script_acl_fallbacks` in cache metrics show these fallback cases.
+Wire bytes include the additional cold-cache commands; `write_calls` counts
+the two logical write operations, not individual script-cache retries.
+
+
+Segment and status refreshes use a bounded grouped query per projection. In the
+source checkout, complete results up to 64 rows use a single autocommit SELECT;
+larger results keep the database cursor after a bounded probe.
+The query limits the group count and the number of customers in each group.
+Only the current group is mapped into Java objects. This avoids one extra query per segment
+or status. Detail refreshes still use ID-based pages. JSON shapes, TTL, replica
+locks and atomic snapshot publication are unchanged.
+
+The `meta` projection reads counts, segment names and status names in one SQL
+statement. These values share the same database snapshot. The limits remain 64
+segment names and 32 status names. Blank names are removed after those limits,
+as before. JDBC arrays and the connection are released after the read. No extra
+pool, thread, cache or property is needed. Redis leases and fencing remain in
+place: this reduces database round trips, not consistency checks.
+
 Every projection is independent.
 
 ```properties
@@ -253,7 +301,7 @@ $env:REACTOR_GLOWROOT_AGENT_ID="cache-writer-local"
 mvn -Pglowroot clean compile exec:java
 ```
 
-The profile adds `java-rust-glowroot-cache-adapter:0.7.0`.
+The profile adds `java-rust-glowroot-cache-adapter:0.7.1`.
 `TelemetryCacheWriterApplication` uses the existing writer lifecycle. Projection names come from current settings. Select transaction type `Scheduler`, name `cache-refresh:<projection>` in Collector UI.
 
 No Spring or REST server is added. Enabled telemetry uses the isolated Rust exporter.
@@ -269,7 +317,7 @@ Use a valid `read:packages` token. SSH does not download Maven packages.
 Start with `micro`. The HTTP gate's 3 MiB steady paired-median bound is not
 a per-load memory guarantee for this application.
 
-[Setup and profile details](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/v0.7.0/docs/functional-operations.md)
+[Setup and profile details](https://github.com/esasmer-dou/java-rust-glowroot-agent/blob/v0.7.1/docs/functional-operations.md)
 
 ## Multiple Replicas
 
@@ -340,6 +388,39 @@ Add these server IDs to `~/.m2/settings.xml`:
 - Measure publish duration, schedule lag, DB pool wait, Redis p99, RSS, and retained versions.
 - Do not add Spring Boot or the REST runtime only for telemetry.
 
+## Frequent Refreshes Without Schedule Drift
+
+The source repository declares a bounded group-query plan for segment and status
+reads. A complete result of at most 64 rows uses one autocommit SELECT. A larger
+result uses the original streaming cursor; probe rows are never published or
+combined with that cursor snapshot. No database result cache is introduced.
+The probe adds one bounded read on overflow. For workloads that routinely exceed
+the bound, use the original string-SQL `forEachQueryGroup` overload directly.
+Java still owns validation, JSON generation and the Redis fenced publication.
+
+For short refresh intervals, `sample.writer.phase-anchored=true` keeps the initial
+spacing between projections. The default `false` waits a full interval after each
+job finishes; different job durations can gradually bring jobs together.
+
+```properties
+sample.writer.phase-anchored=true
+sample.writer.interval-ms=500
+sample.writer.detail.initial-delay-ms=2000
+sample.writer.segment.initial-delay-ms=2100
+sample.writer.status.initial-delay-ms=2200
+sample.writer.campaign.initial-delay-ms=2300
+sample.writer.meta.initial-delay-ms=2400
+```
+
+Missed time slots are skipped, not replayed. Jobs still use the configured thread
+limit and projection locks. No thread or queue is added. Keep TTL longer than the
+interval, expected job/outage duration and safety margin. Keep the default when
+your job needs a full quiet interval after completion. This setting changes
+scheduling, not the DB rows, JSON content or publication consistency.
+
+This source-only option is not a p99 fix or a new production default. Measure
+your job duration separately before enabling it.
+
 ## Glossary
 
 | Term | Meaning |
@@ -358,4 +439,4 @@ Add these server IDs to `~/.m2/settings.xml`:
 - [Turkish PDF guide](docs/rest-sample-cache-writer-user-guide.tr.pdf)
 - [Production settings](src/main/resources/config/production.properties)
 - [Advanced tuning](src/main/resources/config/advanced-tuning.properties)
-- [v0.7.1 release notes](docs/RELEASE_NOTES_v0.7.1.md)
+- [v0.8.0 release notes](docs/RELEASE_NOTES_v0.8.0.md)

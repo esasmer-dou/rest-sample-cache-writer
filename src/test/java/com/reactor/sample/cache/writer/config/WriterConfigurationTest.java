@@ -42,6 +42,8 @@ class WriterConfigurationTest {
         assertEquals("detail,segment,status,campaign,meta", properties.get("sample.writer.projections"));
         assertEquals(2, properties.getInt("sample.writer.scheduler-threads"));
         assertEquals(600000L, properties.getLong("sample.writer.cache-ttl-ms"));
+        assertTrue(com.reactor.rust.cache.config.RustCacheConfig.fromProperties(properties.asProperties())
+                .snapshotBatchEnabled());
     }
 
     @Test

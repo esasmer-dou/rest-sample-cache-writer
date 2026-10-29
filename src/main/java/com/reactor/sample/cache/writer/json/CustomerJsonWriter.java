@@ -7,17 +7,37 @@ import com.reactor.rust.cache.json.Utf8JsonBuffer;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.function.Function;
 
 public final class CustomerJsonWriter extends Utf8JsonWriter {
+    private final JsonField id = key("id");
+    private final JsonField customerNo = key("customerNo");
+    private final JsonField fullName = key("fullName");
+    private final JsonField displayName = key("displayName");
+    private final JsonField segment = key("segment");
+    private final JsonField status = key("status");
+    private final JsonField email = key("email");
+    private final JsonField createdAt = key("createdAt");
+    private final JsonField updatedAt = key("updatedAt");
 
     public byte[] customer(SampleCustomer customer) {
         return customerDetail(customer);
     }
 
     public byte[] customerDetail(SampleCustomer customer) {
-        Utf8JsonBuffer json = json(768);
+        Utf8JsonBuffer json = json(1024);
         appendCustomerDetail(json, customer);
         return utf8(json);
+    }
+
+    /** One refresh owns this encoder. Never share it between projection tasks. */
+    public Function<SampleCustomer, byte[]> detailEncoder() {
+        Utf8JsonBuffer json = json(1024);
+        return customer -> {
+            json.reset(1024);
+            appendCustomerDetail(json, customer);
+            return utf8(json);
+        };
     }
 
     public byte[] customers(List<SampleCustomer> customers) {
@@ -79,17 +99,17 @@ public final class CustomerJsonWriter extends Utf8JsonWriter {
     private void appendCustomerDetail(Utf8JsonBuffer json, SampleCustomer customer) {
         json.append('{');
         json.append("\"customer\":{");
-        field(json, "id", customer.id()).append(',');
-        stringField(json, "customerNo", customer.customerNo()).append(',');
-        stringField(json, "fullName", customer.fullName()).append(',');
-        stringField(json, "status", customer.status());
+        id.number(json, customer.id()).append(',');
+        customerNo.string(json, customer.customerNo()).append(',');
+        fullName.string(json, customer.fullName()).append(',');
+        status.string(json, customer.status());
         json.append("},\"contact\":{");
-        stringField(json, "email", customer.email()).append(',');
+        email.string(json, customer.email()).append(',');
         json.append("\"phones\":[");
         quote(json, "+90-532-" + padded(customer.id(), 4)).append(',');
         quote(json, "+90-212-" + padded(customer.id() + 77, 4));
         json.append("]},\"profile\":{");
-        stringField(json, "segment", customer.segment()).append(',');
+        segment.string(json, customer.segment()).append(',');
         json.append("\"loyalty\":{");
         stringField(json, "tier", loyaltyTier(customer)).append(',');
         field(json, "points", loyaltyPoints(customer));
@@ -103,8 +123,8 @@ public final class CustomerJsonWriter extends Utf8JsonWriter {
         appendOrder(json, customer, 0).append(',');
         appendOrder(json, customer, 1);
         json.append("],\"audit\":{");
-        stringField(json, "createdAt", customer.createdAt().toString()).append(',');
-        stringField(json, "updatedAt", customer.updatedAt().toString()).append(',');
+        createdAt.string(json, customer.createdAt().toString()).append(',');
+        updatedAt.string(json, customer.updatedAt().toString()).append(',');
         stringField(json, "projection", "customer-detail-v1");
         json.append("}}");
     }
@@ -122,12 +142,12 @@ public final class CustomerJsonWriter extends Utf8JsonWriter {
 
     private void appendCustomerSummary(Utf8JsonBuffer json, SampleCustomer customer) {
         json.append('{');
-        field(json, "id", customer.id()).append(',');
-        stringField(json, "customerNo", customer.customerNo()).append(',');
-        stringField(json, "displayName", customer.fullName()).append(',');
+        id.number(json, customer.id()).append(',');
+        customerNo.string(json, customer.customerNo()).append(',');
+        displayName.string(json, customer.fullName()).append(',');
         json.append("\"profile\":{");
-        stringField(json, "segment", customer.segment()).append(',');
-        stringField(json, "status", customer.status()).append(',');
+        segment.string(json, customer.segment()).append(',');
+        status.string(json, customer.status()).append(',');
         stringField(json, "tier", loyaltyTier(customer));
         json.append("},\"lastOrder\":{");
         stringField(json, "orderNo", orderNo(customer, 0)).append(',');

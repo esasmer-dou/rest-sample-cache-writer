@@ -7,13 +7,13 @@
     <parent>
         <groupId>com.reactor</groupId>
         <artifactId>rust-java-platform-parent</artifactId>
-        <version>4.7.1</version>
+        <version>4.8.0</version>
         <relativePath/>
     </parent>
 
     <groupId>com.reactor.sample</groupId>
     <artifactId>rest-sample-cache-writer</artifactId>
-    <version>0.7.1</version>
+    <version>0.8.0</version>
     <packaging>jar</packaging>
 
     <name>rest-sample-cache-writer</name>
@@ -101,7 +101,7 @@
                 <repository><id>github-glowroot</id><url>https://maven.pkg.github.com/esasmer-dou/java-rust-glowroot-agent</url></repository>
             </repositories>
             <dependencies>
-                <dependency><groupId>com.reactor</groupId><artifactId>java-rust-glowroot-cache-adapter</artifactId><version>0.7.0</version></dependency>
+                <dependency><groupId>com.reactor</groupId><artifactId>java-rust-glowroot-cache-adapter</artifactId><version>0.7.1</version></dependency>
             </dependencies>
             <build><plugins><plugin>
                 <groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.0</version>
