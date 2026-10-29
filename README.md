@@ -1,5 +1,12 @@
 # rest-sample-cache-writer
 
+## Prepared Patch 0.8.1
+
+This checkout uses REST/platform 4.8.1 and cache 0.9.1. It includes
+the ARM provenance packaging fix without changing business logic or native ABIs.
+Publication is pending approval; 0.8.0 remains the published sample version.
+[Patch notes](docs/RELEASE_NOTES_v0.8.1.md).
+
 [English](README.md) | [Türkçe](README.tr.md)
 
 ## Start With 0.8.0

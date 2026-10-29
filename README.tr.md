@@ -1,5 +1,12 @@
 # rest-sample-cache-writer
 
+## Hazırlanan Düzeltme 0.8.1
+
+Bu kaynak ağacı REST/platform 4.8.1 ve cache 0.9.1 kullanır. ARM manifesti
+düzeltmesini içerir. İş kodu ve native ABI'ler değişmez. Yayım onayı bekleniyor;
+yayımlanmış sample sürümü hâlâ 0.8.0'dır.
+[Düzeltme notları](docs/RELEASE_NOTES_v0.8.1.tr.md).
+
 [English](README.md) | [Türkçe](README.tr.md)
 
 ## 0.8.0 İle Başlayın
