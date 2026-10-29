@@ -6,10 +6,10 @@
 
 Projection işleri, hazırlanmış JSON alan adlarını ve sınırlı JDBC/Redis işlemlerini kullanır. Projection bazlı zamanlama, kilit, fencing ve TTL koruması korunur. Writer, veritabanından Redis'e yayın yapar; REST okuma yapmaz.
 
-[Kullanım rehberi](docs/functional-operations.md) · [Sürüm notları](docs/RELEASE_NOTES_v0.8.0.md)
+[Kullanım rehberi](docs/functional-operations.tr.md) · [Sürüm notları](docs/RELEASE_NOTES_v0.8.0.tr.md)
 
 
-Yeni kullanım rehberi: [Yeni kullanım örnekleri](docs/functional-operations.tr.md).
+Özellik, çalıştırma ve hata eşleştirmesi: [Kullanım örnekleri](docs/functional-operations.tr.md).
 
 PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir scheduler uygulamasıdır.
 
@@ -156,7 +156,7 @@ sample.writer.projections=campaign,meta
 
 ## Çalışma Aralığı, TTL ve Kilit
 
-Henüz yayımlanmayan kaynakta bu sample,
+Yayımlanmış sample `0.8.0`, cache `0.9.0` ile
 `reactor.cache.redis.snapshot-batch-enabled=true` ayarını kullanır.
 Kütüphanenin kendi varsayılanı kapalı kalır. Uygun native dosya ile
 standalone Redis ve Sentinel'de küçük bir yenileme iki Redis yazma çağrısıyla
@@ -174,7 +174,7 @@ verin. SQL okumaları ve yayınlanan JSON değişmez. Küçük bir yenileme içi
 yerine beş Redis yazma çağrısı yapılır. Kendi ortamınızda işin toplam süresini
 ölçün. Çağrı sayısının azalması, belirli bir p99 değerini garanti etmez.
 
-Güncel native kaynak bu iki sabit Lua programını `EVALSHA` ile çağırır. Redis'te
+Uyumlu native kütüphane bu iki sabit Lua programını `EVALSHA` ile çağırır. Redis'te
 saklanan şey programdır; müşteri verisi veya SQL sonucu değildir. Program
 bulunamazsa bir kez `EVAL` gönderilir. Sonraki çağrılar programın özetini taşır.
 Redis, `EVALSHA` komutuna izin vermiyorsa mevcut `EVAL` yolu korunur. Timeout
@@ -210,12 +210,16 @@ sample.writer.campaign.lock-ttl-ms=120000
 
 Bu ayarlar şu anlama gelir:
 
-1. Kampanya projection'ı 30 saniyede bir çalışır.
-2. Yazılan veri 120 saniye sonra silinir.
-3. Aynı anda yalnızca bir replica kampanya verisini yeniler.
+1. Varsayılan fixed-delay zamanlamada sonraki kampanya denemesi, iş bitiminden 30 saniye sonra başlar.
+2. Redis verisinin TTL'i 120 saniyedir; bu değer reader tazelik sınırı değildir.
+3. Yayını 120 saniyelik Redis kilidi korur; eski writer için sahiplik/fencing kontrolü yapılır.
 4. Başka bir replica farklı bir projection'ı aynı anda yenileyebilir.
 
-Cache TTL değeri refresh interval değerinden uzun olmalıdır. Library hatalı değeri güvenli bir değere çeker ve loglar. Yine de production ayarını açıkça doğru vermelisiniz.
+Cache TTL değerini çalışma aralığı, beklenen hazırlama/kesinti süresi ve güvenlik
+payından uzun tutun. Yalnız interval'e eşit/kısa TTL, interval +
+`sample.writer.cache-ttl-safety-margin-ms` değerine çıkarılıp loglanır; bu alt sınır kesinti garantisi değildir.
+Lock TTL ayrıdır; işin zaman aşımı değildir. Tüm yenileme ve ağ payını kapsamalıdır.
+Kilidi dolan iş hesaplamaya devam edebilir; eski kilitle yayın yapamaz.
 
 ## Redis Çalışma Biçimini Seçin
 
@@ -326,12 +330,13 @@ her iş yükünde aynı maliyetle çalışacağının garantisi değildir.
 
 Birden fazla replica güvenle çalışabilir.
 
-- Lock anahtarı projection'a aittir.
-- İki replica aynı projection'ı birlikte yazamaz.
-- İki replica farklı projection'ları birlikte yazabilir.
-- Bir replica durursa lock TTL sonunda diğer replica görevi alır.
+- Scheduler bu process içinde aynı projection'ın zamanlanmış işlerini üst üste çalıştırmaz; replica'ları Redis kilidi koordine eder.
+- Yayında güncel kilit sahibi/fencing token kontrol edilir. Kilit süresi dolarsa hesaplamalar çakışabilir; eski writer'a yayın yetkisi verilmez.
+- Farklı projection'lar scheduler ve bağlantı sınırları içinde eşzamanlı çalışabilir.
+- Normal bitiş kilidi erken bırakır. Çökme sonrasında başka replica, süre dolduktan sonraki denemesinde kilidi alabilir.
 
-Her projection için farklı bir `lock-name` kullanın.
+Her projection için sabit ve farklı `lock-name` kullanın; aynı projection'ın tüm
+replica'larında bu ad aynı olmalıdır. Reader ve writer projection namespace'leri de eşleşmelidir.
 
 ## Kod Haritası
 
@@ -377,7 +382,7 @@ GitHub Packages için `read:packages` yetkili token gerekir. Token'ın private `
 | Reader eski veya eksik veri görüyor | Projection namespace, interval, TTL ve writer logları |
 | İki replica aynı veriyi yazıyor | Projection lock adları bütün replica'larda aynı olmalı |
 | Redis memory hızlı büyüyor | Saklanan sürüm, TTL, index limiti ve aktif veri grubu sayısı |
-| `reactor.glowroot.enabled=true` yazdım ama veri yok | Bu sade Java sample agent çalışma katmanını başlatmaz; yukarıdaki destek sınırını okuyun |
+| `reactor.glowroot.enabled=true` yazdım ama veri yok | `-Pglowroot` ile derleyip çalıştırın; `TelemetryCacheWriterApplication` ve cache adaptörü gerekir. Collector/agent ID ayarını kontrol edin. Bu HTTP sunucusu olmayan process'te REST diagnostics endpoint'i yoktur |
 
 ## Production Kontrol Listesi
 
@@ -421,7 +426,7 @@ süresi ve güvenlik payının toplamından uzun olmalıdır. İş bittikten son
 dinlenme aralığı gerekiyorsa varsayılanı koruyun. Bu seçenek yalnız zamanlamayı
 değiştirir. DB satırları, JSON içeriği ve yayın tutarlılığı değişmez.
 
-Bu kaynak kod seçeneği p99 düzeltmesi veya yeni production varsayılanı değildir.
+Bu isteğe bağlı seçenek p99 düzeltmesi veya yeni production varsayılanı değildir.
 Açmadan önce işin çalışma süresini ayrıca ölçün.
 
 ## Kısa Sözlük
@@ -439,7 +444,8 @@ Açmadan önce işin çalışma süresini ayrıca ölçün.
 ## Ayrıntılı Bilgi
 
 - [Türkçe kullanıcı rehberi](docs/USER_GUIDE.tr.md)
-- [Türkçe PDF rehberi](docs/rest-sample-cache-writer-user-guide.tr.pdf)
+- [Türkçe PDF rehberi](docs/rest-sample-cache-writer-user-guide.tr.pdf) (önceki kopya; bu düzeltmeler için Markdown'ı kullanın)
 - [Production ayarları](src/main/resources/config/production.properties)
 - [Advanced tuning ayarları](src/main/resources/config/advanced-tuning.properties)
 - [v0.8.0 sürüm notları](docs/RELEASE_NOTES_v0.8.0.tr.md)
+- [Henüz yayımlanmamış belge düzeltmeleri](docs/RELEASE_NOTES_UNRELEASED.tr.md)

@@ -1,6 +1,7 @@
 # rest-sample-cache-writer Kullanıcı Rehberi
 
-Bu rehber ilk kullanım içindir.
+Bu rehber sample `0.8.0` / cache `0.9.0` ile ilk kullanım içindir.
+Özellik, batch ve telemetri eşleştirmesi için [güncel kullanım tablosuna](functional-operations.tr.md) bakın.
 
 Amaç kısa ve nettir: PostgreSQL'den veriyi okuyup Redis'e hazır JSON snapshot olarak yazmak.
 
@@ -83,8 +84,8 @@ Tek seferlik snapshot için:
 mvn -q -Dsample.writer.run-once=true exec:java
 ```
 
-Üretilen ince JAR yalnızca uygulama sınıflarını içerir. Doğrudan `java -jar` yerine Maven komutunu
-veya bu rehberdeki jlink image akışını kullanın.
+Üretilen ince JAR yalnızca uygulama sınıflarını içerir. Doğrudan `java -jar` yerine
+yukarıdaki Maven komutunu kullanın.
 
 ## Kopyala-Yapıştır Örnekler
 
@@ -147,30 +148,38 @@ Her projection kendi interval, TTL ve lock değerine sahip olabilir.
 | Property | Ne işe yarar? | Ne zaman değiştirilir? |
 |----------|---------------|------------------------|
 | `sample.writer.projections=detail,segment,status,campaign,meta` | Çalışacak projection listesidir. | Sadece ihtiyacınız olan read model'leri bırakın. |
-| `sample.writer.interval-ms=60000` | Varsayılan yenileme aralığıdır. | Tüm projection'lar aynı sıklıkta yenilenecekse kullanın. |
+| `sample.writer.interval-ms=60000` | Varsayılan fixed-delay modda iş bittikten sonraki bekleme süresidir. | Projection'a özel değer yoksa kullanılır. |
 | `sample.writer.detail.interval-ms` | Sadece `detail` projection aralığıdır. | Projection bazlı zamanlama istiyorsanız kullanın. |
 | `sample.writer.detail.cache-ttl-ms` | `detail` verisinin Redis TTL değeridir. | Her zaman interval değerinden uzun olmalıdır. |
 | `sample.writer.scheduler-threads=2` | Aynı anda kaç projection job çalışabilir. | Replica ve DB kapasitesine göre küçük tutun. |
-| `sample.writer.lock-ttl-ms=300000` | Redis lock yaşam süresidir. | Job süresinden uzun olmalıdır. |
-| `sample.db.maximum-pool-size=2` | Hikari DB connection üst limitidir. | DB kapasitesi ölçülmeden artırılmamalıdır. |
+| `sample.writer.lock-ttl-ms=300000` | Redis lock yaşam süresidir; job timeout'u değildir. | Tam yenileme süresi ve ağ payını kapsamalıdır. |
+| `sample.db.maximum-pool-size=2` | Production ayar dosyasındaki Hikari DB connection üst limitidir. | DB kapasitesi ölçülmeden artırılmamalıdır. |
+
+Temel dosyada `sample.writer.snapshot-batch-size=256` ve `sample.writer.page-size=500`
+kullanılır; advanced dosyada bunlar `512` / `1000` olur. İlki Redis kayıt, ikincisi DB
+satır sınırıdır; aynı anlama gelmez. [Batch tablosu](functional-operations.tr.md#batch-ayarları-ve-yayın)
+pipeline sınırını da ayırır. Hiçbiri async snapshot kuyruğu açmaz.
 
 ## TTL Ve Refresh Kuralı
 
-TTL her zaman refresh interval değerinden uzun olmalıdır.
+TTL, refresh interval yanında hazırlama süresi, beklenen kesinti ve güvenlik payını da kapsamalıdır.
 
 | Örnek | Doğru mu? | Neden |
 |-------|-----------|-------|
-| `interval=60000`, `ttl=300000` | Evet | Yeni snapshot gelmeden eski veri silinmez. |
+| `interval=60000`, `ttl=300000` | Başlangıç reçetesi | Sağlıklı yenileme için pencere bırakır; iş/kesinti süresi ayrıca ölçülür. |
 | `interval=120000`, `ttl=60000` | Hayır | Reader kısa süre cache miss görebilir. |
-| `campaign interval=30000`, `ttl=120000` | Evet | Sık değişen veri için güvenli pencere bırakır. |
+| `campaign interval=30000`, `ttl=120000` | Başlangıç reçetesi | Kısa yenileme için pay bırakır; kesintiye dayanıklılık garantisi değildir. |
 
-Kural basittir:
+Production payını açıkça planlayın:
 
 ```text
-cache-ttl-ms > interval-ms + güvenlik payı
+cache-ttl-ms > interval-ms + hazırlama/kesinti bütçesi + güvenlik payı
 ```
 
-Güvenlik payı için `sample.writer.cache-ttl-safety-margin-ms` kullanılır.
+Kütüphane yalnız interval'e eşit/kısa TTL'i interval +
+`sample.writer.cache-ttl-safety-margin-ms` değerine çıkarır. Bu asgari düzeltme üretim
+kesinti bütçesinin yerine geçmez. Redis TTL, reader'ın
+isteğe bağlı `max-age-ms` tazelik sınırından ve lock TTL'den ayrıdır.
 
 ## İki Replica Nasıl Davranır?
 
@@ -189,9 +198,14 @@ sequenceDiagram
     R2->>Redis: campaign snapshot yazar
 ```
 
-İki replica aynı projection'ı aynı anda yazmaz.
+Scheduler aynı process içinde bir projection'ın zamanlanmış işlerini çakıştırmaz.
+Replica'lar Redis kilidiyle koordine edilir; yayında sahiplik/fencing doğrulanır.
+Lock TTL dolunca eski iş hesaplamaya devam edebilir, fakat eski kilitle yayın yapamaz.
 
 Farklı projection'lar aynı anda farklı replica üzerinde çalışabilir.
+Normal bitiş kilidi erken bırakır. Çöken process sonrasında kalan lock TTL dolmalı;
+diğer replica ancak sonraki denemesinde kilidi alabilir. Aynı projection'ın namespace
+ve lock adı replica'lar arasında aynı, farklı projection'ların lock adları ayrı olmalıdır.
 
 ## Sık Hatalar
 
@@ -199,5 +213,7 @@ Farklı projection'lar aynı anda farklı replica üzerinde çalışabilir.
 |---------|----------------|-------|
 | TTL uyarısı | TTL, interval değerinden kısa. | TTL değerini interval değerinden uzun yapın. |
 | Lock alınamadı | Başka replica aynı projection'ı yazıyor. | Bu normaldir. Logları kontrol edin. |
+| Yayında kilit/fencing hatası | İş lock TTL'i aşmış veya sahiplik değişmiş. | İş süresini/lock TTL'i ölçün; sonucu belirsiz yazmayı körlemesine tekrarlamayın. |
 | DB yavaşlıyor | Scheduler thread veya Hikari pool fazla. | `scheduler-threads` ve `maximum-pool-size` düşürün. |
-| Reader `cache_not_ready` dönüyor | Writer henüz snapshot yazmadı. | Writer loglarında projection publish satırlarını kontrol edin. |
+| Reader `customer_cache_not_ready` dönüyor | Writer henüz snapshot yazmadı. | Writer loglarında projection publish satırlarını kontrol edin. |
+| Glowroot verisi yok | Yalnız enabled ayarı verilmiş veya collector hatalı. | [README komutuyla](../README.tr.md#glowroot-agent-kullanımı) `-Pglowroot` kullanın; writer'da REST diagnostics endpoint'i aramayın. |

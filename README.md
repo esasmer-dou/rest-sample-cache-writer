@@ -9,7 +9,7 @@ Projection jobs reuse prepared JSON field names and bounded JDBC/Redis work. Per
 [Usage guide](docs/functional-operations.md) · [Release notes](docs/RELEASE_NOTES_v0.8.0.md)
 
 
-New usage guide: [New usage examples](docs/functional-operations.md).
+Feature, run and error map: [Usage examples](docs/functional-operations.md).
 
 A small scheduled application that reads PostgreSQL and publishes ready JSON snapshots to Redis.
 
@@ -155,8 +155,8 @@ sample.writer.projections=campaign,meta
 
 ## Schedule, TTL, and Lock
 
-The unpublished source checkout enables `reactor.cache.redis.snapshot-batch-enabled=true`
-in this sample. The library's own default is still off. On standalone Redis and
+Released sample `0.8.0` enables `reactor.cache.redis.snapshot-batch-enabled=true`
+with cache `0.9.0`. The library's own default is still off. On standalone Redis and
 Sentinel, a matching native library completes a small refresh in two Redis write
 calls: acquire the lease and fencing token, then write the
 last batch, publish its version and release the lease. Cluster keeps the existing
@@ -171,7 +171,7 @@ The SQL reads and published JSON stay the same. The difference is five Redis wri
 calls instead of two for a small refresh. Measure the end-to-end job duration in
 your deployment; fewer calls do not guarantee a specific p99.
 
-The current native source uses `EVALSHA` for these two fixed scripts. This caches
+The matching native library uses `EVALSHA` for these two fixed scripts. This caches
 the Lua program in Redis, not customer data or SQL results. A missing script
 uses `EVAL` once; subsequent calls send its digest. Explicit denial of the
 `EVALSHA` command also keeps the existing `EVAL` path. Timeouts and Lua runtime
@@ -181,8 +181,8 @@ Wire bytes include the additional cold-cache commands; `write_calls` counts
 the two logical write operations, not individual script-cache retries.
 
 
-Segment and status refreshes use a bounded grouped query per projection. In the
-source checkout, complete results up to 64 rows use a single autocommit SELECT;
+Segment and status refreshes use a bounded grouped query per projection. Complete
+results up to 64 rows use a single autocommit SELECT;
 larger results keep the database cursor after a bounded probe.
 The query limits the group count and the number of customers in each group.
 Only the current group is mapped into Java objects. This avoids one extra query per segment
@@ -207,12 +207,16 @@ sample.writer.campaign.lock-ttl-ms=120000
 
 This means:
 
-1. The campaign projection runs every 30 seconds.
-2. The published data expires after 120 seconds.
-3. Only one replica refreshes the campaign projection at a time.
+1. With default fixed-delay scheduling, the next campaign attempt starts 30 seconds after completion.
+2. The published Redis data has a 120-second TTL; this is not a reader freshness limit.
+3. A 120-second Redis lease protects publication, with owner/fencing checks against stale writers.
 4. Another replica may refresh a different projection at the same time.
 
-Keep cache TTL longer than the refresh interval. The library corrects an unsafe value and logs the effective TTL, but production configuration should still be explicit.
+Keep cache TTL longer than the interval, expected build/outage time and safety margin.
+Only a TTL at or below the interval is raised to interval plus
+`sample.writer.cache-ttl-safety-margin-ms` and logged; that minimum is not an outage guarantee.
+Lock TTL is separate: it is not a job timeout. Size it for the complete refresh and
+network margin; expired work can still compute, but cannot publish under a stale lease.
 
 ## Redis Topology
 
@@ -323,12 +327,13 @@ a per-load memory guarantee for this application.
 
 Multiple replicas are supported.
 
-- The lock key belongs to a projection.
-- Two replicas cannot publish the same projection together.
-- Two replicas can publish different projections together.
-- If one replica stops, another replica acquires the lock after its TTL.
+- The scheduler avoids overlapping scheduled runs of one projection in this process; Redis leases coordinate replicas.
+- Publication checks the current lock owner/fencing token. Lease expiry can overlap computation, not authorize stale publication.
+- Different projections can run concurrently within the configured scheduler and connection limits.
+- Normal completion releases the lease early. After a crash, another replica may acquire it on its next attempt after expiry.
 
-Use a different `lock-name` for every projection.
+Use a stable, different `lock-name` for every projection, identical across replicas
+of that projection. Reader and writer projection namespaces must also match.
 
 ## Code Map
 
@@ -374,7 +379,7 @@ Add these server IDs to `~/.m2/settings.xml`:
 | Reader sees old or missing data | Projection namespace, refresh interval, TTL, and writer logs |
 | Two replicas publish the same data | Projection lock names must match across replicas |
 | Redis memory grows too quickly | Reduce retained versions, TTLs, index limits, or active projections |
-| `reactor.glowroot.enabled=true` produces no data | This plain-Java sample does not start the agent runtime; see the boundary above |
+| `reactor.glowroot.enabled=true` produces no data | Build/run with `-Pglowroot` so `TelemetryCacheWriterApplication` and the cache adapter are included; check collector/agent ID. This headless process has no REST diagnostics endpoint |
 
 ## Production Checklist
 
@@ -418,7 +423,7 @@ interval, expected job/outage duration and safety margin. Keep the default when
 your job needs a full quiet interval after completion. This setting changes
 scheduling, not the DB rows, JSON content or publication consistency.
 
-This source-only option is not a p99 fix or a new production default. Measure
+This opt-in option is not a p99 fix or a new production default. Measure
 your job duration separately before enabling it.
 
 ## Glossary
@@ -436,7 +441,8 @@ your job duration separately before enabling it.
 ## More Detail
 
 - [Turkish user guide](docs/USER_GUIDE.tr.md)
-- [Turkish PDF guide](docs/rest-sample-cache-writer-user-guide.tr.pdf)
+- [Turkish PDF guide](docs/rest-sample-cache-writer-user-guide.tr.pdf) (earlier snapshot; use Markdown for these corrections)
 - [Production settings](src/main/resources/config/production.properties)
 - [Advanced tuning](src/main/resources/config/advanced-tuning.properties)
 - [v0.8.0 release notes](docs/RELEASE_NOTES_v0.8.0.md)
+- [Unreleased documentation corrections](docs/RELEASE_NOTES_UNRELEASED.md)
