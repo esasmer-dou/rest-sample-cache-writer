@@ -1,19 +1,19 @@
 # rest-sample-cache-writer
 
-## Hazırlanan Düzeltme 0.8.1
+## 0.8.1 Sürümü
 
-Bu kaynak ağacı REST/platform 4.8.1 ve cache 0.9.1 kullanır. ARM manifesti
-düzeltmesini içerir. İş kodu ve native ABI'ler değişmez. Yayım onayı bekleniyor;
-yayımlanmış sample sürümü hâlâ 0.8.0'dır.
+Bu kaynak ağacı REST/platform 4.8.1, cache 0.9.1 ve model 0.5.1 kullanır. ARM manifesti
+düzeltmesini içerir. İş kodu ve native ABI'ler değişmez.
+Önceki 0.8.0 sürüm notları tarihsel kayıttır.
 [Düzeltme notları](docs/RELEASE_NOTES_v0.8.1.tr.md).
 
 [English](README.md) | [Türkçe](README.tr.md)
 
-## 0.8.0 İle Başlayın
+## 0.8.1 İle Başlayın
 
 Projection işleri, hazırlanmış JSON alan adlarını ve sınırlı JDBC/Redis işlemlerini kullanır. Projection bazlı zamanlama, kilit, fencing ve TTL koruması korunur. Writer, veritabanından Redis'e yayın yapar; REST okuma yapmaz.
 
-[Kullanım rehberi](docs/functional-operations.tr.md) · [Sürüm notları](docs/RELEASE_NOTES_v0.8.0.tr.md)
+[Kullanım rehberi](docs/functional-operations.tr.md) · [Sürüm notları](docs/RELEASE_NOTES_v0.8.1.tr.md)
 
 
 Özellik, çalıştırma ve hata eşleştirmesi: [Kullanım örnekleri](docs/functional-operations.tr.md).
@@ -26,7 +26,7 @@ PostgreSQL verisini okuyup Redis'e hazır JSON snapshot'ları yazan küçük bir
 - Uygulama Dubbo kullanmaz.
 - Her projection'ın kendi çalışma aralığı, TTL değeri ve distributed lock'u vardır.
 
-Kullanılan sürümler: `rust-java-platform-parent:4.8.0`, `java-rust-cache:0.9.0`, `rust-sample-model:0.5.0`.
+Kullanılan sürümler: `rust-java-platform-parent:4.8.1`, `java-rust-cache:0.9.1`, `rust-sample-model:0.5.1`.
 
 ## Önce Bu Bölümü Okuyun
 
@@ -48,13 +48,13 @@ ve production sınıfı olarak pakete girmez.
 
 ## Güncel Kaynak Ayarları
 
-Bu güncelleme, platformu REST `4.8.0` ve isteğe bağlı agent `0.7.1` ile eşler.
+Bu güncelleme, platformu REST `4.8.1` ve isteğe bağlı agent `0.7.1` ile eşler.
 Seçtiğiniz bağımlılığın native dosyasını kullanın. Eski SO/DLL dosyalarını karıştırmayın.
 İş kodu, URL'ler ve ayar anahtarları değişmez. Telemetri varsayılan olarak kapalıdır.
 HTTP micro bellek testi, veritabanı işinde veya daha ayrıntılı profilde aynı maliyeti garanti etmez.
 
-`0.8.0` sürümü platform parent `4.8.0` kullanır. Uygulamayı hizalanmış bağımlılıklarla
-yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.8.0.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
+`0.8.1` sürümü platform parent `4.8.1` kullanır. Uygulamayı hizalanmış bağımlılıklarla
+yeniden derleyin. [Sürüm notlarını](docs/RELEASE_NOTES_v0.8.1.tr.md) okuyun. Runtime ayarları ve adresler değişmez.
 
 - Managed writer launcher PostgreSQL kaynağını tek lifecycle içinde oluşturur ve kapatır.
 - Generated projection registry bağlantısı tekrar eden projection lookup kodunu kaldırır.
