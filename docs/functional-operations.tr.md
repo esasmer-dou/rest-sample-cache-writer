@@ -2,7 +2,7 @@
 
 [English](functional-operations.md) | [Turkish](functional-operations.tr.md)
 
-Bu örnekler yayımlanmış sample `0.8.0`, cache `0.9.0` ve platform `4.8.0`
+Bu örnekler yayımlanmış sample `0.8.2`, cache `0.9.2` ve platform `4.8.2`
 sürümlerine aittir (isteğe bağlı agent `0.7.1`). Hizalanmış paketleri ve native dosyaları kullanın.
 
 ## Özellik Ve Çalıştırma Tablosu
