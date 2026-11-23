@@ -7,13 +7,13 @@
     <parent>
         <groupId>com.reactor</groupId>
         <artifactId>rust-java-platform-parent</artifactId>
-        <version>4.8.2</version>
+        <version>4.9.0</version>
         <relativePath/>
     </parent>
 
     <groupId>com.reactor.sample</groupId>
     <artifactId>rest-sample-cache-writer</artifactId>
-    <version>0.8.2</version>
+    <version>0.8.3</version>
     <packaging>jar</packaging>
 
     <name>rest-sample-cache-writer</name>
@@ -35,6 +35,7 @@
         <dependency>
             <groupId>com.reactor.sample</groupId>
             <artifactId>rust-sample-model</artifactId>
+            <version>0.5.3</version>
         </dependency>
         <dependency>
             <groupId>com.reactor</groupId>

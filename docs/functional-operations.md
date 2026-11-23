@@ -2,7 +2,7 @@
 
 [English](functional-operations.md) | [Turkish](functional-operations.tr.md)
 
-These examples belong to released sample `0.8.2`, cache `0.9.2` and platform `4.8.2`
+These examples belong to released sample `0.8.3`, cache `0.9.2` and platform `4.9.0`
 (optional agent `0.7.1`). Use the aligned published packages and native files.
 
 ## Feature And Run Map

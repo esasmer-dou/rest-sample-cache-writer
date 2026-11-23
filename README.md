@@ -1,16 +1,16 @@
 # rest-sample-cache-writer
 
-## Version 0.8.2
+## Version 0.8.3
 
-Sample `0.8.2` uses REST/platform `4.8.2`, cache `0.9.2` and model `0.5.2`.
+Sample `0.8.3` uses REST/platform `4.9.0`, cache `0.9.2` and model `0.5.3`.
 Java business code and native ABIs are unchanged. Upgrade the aligned dependencies together.
-[Upgrade and usage notes](docs/RELEASE_NOTES_v0.8.2.md).
+[Upgrade and usage notes](docs/RELEASE_NOTES_v0.8.3.md).
 
 [English](README.md) | [Türkçe](README.tr.md)
 
 ## Compose
 
-This 0.8.2 sample uses REST/platform 4.8.2 and the relevant cache or Dubbo 0.9.2 package. The Compose commands below are for local development. Release qualification runs on EmaTech; Windows and ARM execution checks are separate compatibility tests. A compiled platform artifact does not imply load-test qualification on that platform.
+This 0.8.3 sample uses REST/platform 4.9.0 and the relevant cache or Dubbo 0.9.2 package. The Compose commands below are for local development. Release qualification runs on EmaTech; Windows and ARM execution checks are separate compatibility tests. A compiled platform artifact does not imply load-test qualification on that platform.
 
 The shared topology lives in sibling `rest-sample-cache-reader/docker/compose/`.
 See the [full Compose guide](https://github.com/esasmer-dou/rest-sample-cache-reader/blob/master/README.md#compose).
@@ -46,11 +46,11 @@ failure. This idiomatic application separates SQL, mapping and fenced publicatio
 it is not a minimal benchmark fixture. The single-DB/Redis demo is not HA, and
 configured limits do not prove runtime RSS, sustained throughput or p99 acceptance.
 
-## Start With 0.8.2
+## Start With 0.8.3
 
 Projection jobs reuse prepared JSON field names and bounded JDBC/Redis work. Per-projection schedules, locks, fencing and TTL safety remain intact. The writer still owns DB-to-Redis publication, not REST reads.
 
-[Usage guide](docs/functional-operations.md) · [Release notes](docs/RELEASE_NOTES_v0.8.2.md)
+[Usage guide](docs/functional-operations.md) · [Release notes](docs/RELEASE_NOTES_v0.8.3.md)
 
 
 Feature, run and error map: [Usage examples](docs/functional-operations.md).
@@ -63,7 +63,7 @@ A small scheduled application that reads PostgreSQL and publishes ready JSON sna
 - The process does not use Dubbo.
 - Each projection has its own schedule, TTL, and distributed lock.
 
-Current versions: `rust-java-platform-parent:4.8.2`, `java-rust-cache:0.9.2`, `rust-sample-model:0.5.2`.
+Current versions: `rust-java-platform-parent:4.9.0`, `java-rust-cache:0.9.2`, `rust-sample-model:0.5.3`.
 
 ## Read This First
 
@@ -84,13 +84,13 @@ generators stay on the compiler path and are not packaged as production classes.
 
 ## Current Checkout
 
-This update aligns the platform with REST `4.8.2` and optional agent `0.7.1`.
+This update aligns the platform with REST `4.9.0` and optional agent `0.7.1`.
 Use the native file packaged with the dependency you selected. Do not mix older SO/DLL files.
 Business code, URLs and configuration keys stay the same. Telemetry remains disabled by default.
 The HTTP micro memory gate does not guarantee the same overhead for a database job or a richer profile.
 
-Version `0.8.2` uses platform parent `4.8.2`. Rebuild the application with the aligned
-dependencies. See [release notes](docs/RELEASE_NOTES_v0.8.2.md). Runtime settings and URLs are unchanged.
+Version `0.8.3` uses platform parent `4.9.0`. Rebuild the application with the aligned
+dependencies. See [release notes](docs/RELEASE_NOTES_v0.8.3.md). Runtime settings and URLs are unchanged.
 
 - The managed writer launcher creates and closes the PostgreSQL resource in one lifecycle.
 - Generated projection registry wiring replaces repeated projection lookup code.

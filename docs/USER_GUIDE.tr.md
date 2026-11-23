@@ -1,6 +1,6 @@
 # rest-sample-cache-writer Kullanıcı Rehberi
 
-Bu rehber sample `0.8.2` / cache `0.9.2` ile ilk kullanım içindir.
+Bu rehber sample `0.8.3` / cache `0.9.2` ile ilk kullanım içindir.
 Özellik, batch ve telemetri eşleştirmesi için [güncel kullanım tablosuna](functional-operations.tr.md) bakın.
 
 Amaç kısa ve nettir: PostgreSQL'den veriyi okuyup Redis'e hazır JSON snapshot olarak yazmak.

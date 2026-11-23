@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.3 - 2026-11-23
+
+Aligned with REST/platform `4.9.0`.
+
+[Release notes](docs/RELEASE_NOTES_v0.8.3.md) | [Türkçe sürüm notları](docs/RELEASE_NOTES_v0.8.3.tr.md)
+
 ## 0.8.1 - 2026-10-30
 
 Align REST/platform `4.8.1`, cache `0.9.1` and shared model `0.5.1`. Include the corrected ARM64 provenance sidecars and documentation corrections; native binary bytes and ABI contracts are unchanged.
