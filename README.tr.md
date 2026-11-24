@@ -10,42 +10,9 @@ Java iş kodu ve native ABI'ler değişmez. Eşleşen bağımlılıkları birlik
 
 ## Compose
 
-Bu örnek 0.8.3 sürümünde REST/platform 4.9.0 ve ilgili cache veya Dubbo 0.9.2 paketiyle çalışır. Aşağıdaki Compose komutları yerel geliştirme içindir. Yayın doğrulaması EmaTech üzerinde yapılır; Windows ve ARM çalıştırma kontrolleri ayrı uyumluluk testleridir. Bir platformun derlenmiş olması, o platformda yük testi yapıldığı anlamına gelmez.
+Bu örneği tek başına çalıştırmak için [Hızlı Başlangıç](#hızlı-başlangıç) bölümünü izleyin.
 
-Ortak topoloji, yan yana alınmış `rest-sample-cache-reader/docker/compose/` içindedir.
-[Ayrıntılı Compose rehberini](https://github.com/esasmer-dou/rest-sample-cache-reader/blob/master/README.tr.md#compose)
-inceleyin. Dört sample deposunu kendi adlarıyla aynı üst dizinde tutun.
-Linux/amd64 Docker Engine, `--wait` destekli Compose v2, JDK 21/Maven ve çözülebilen
-uyumlu bağımlılıklar gerekir. Bash için `curl`, `jq`, `timeout`; PowerShell için
-sürüm 7 kullanın. Bu deponun kök dizininden:
-
-```bash
-bash ../rest-sample-cache-reader/scripts/verify-compose-topology.sh --prepare
-# Alternatif: yalnız katalog sunan native provider + native-static-consumer
-bash ../rest-sample-cache-reader/scripts/verify-compose-topology.sh --prepare --native-provider
-```
-
-PowerShell: `pwsh -File ../rest-sample-cache-reader/scripts/verify-compose-topology.ps1 -Prepare`
-(alternatif için `-NativeProvider` ekleyin). Hazırlık, dört sample'ı testleri
-çalıştırmadan paketler ve runtime bağımlılıklarını kopyalar. Seed içeren PostgreSQL,
-Redis 7, writer, reader, provider ve consumer'ın her biri 1 CPU / 128 MiB ile
-sınırlıdır. Uygulamalar OpenJ9 Java 21/JNI kullanır. Reader `127.0.0.1:18081`,
-consumer `127.0.0.1:18082` adresindedir. Writer HTTP API açmaz; sağlık kontrolü
-Redis'te canlı fenced projection pointer'larını gerektirir.
-
-Full smoke, POST/PATCH isteğini consumer/provider üzerinden PostgreSQL'e gönderir;
-writer-fenced Redis-reader yakınsamasını ve consumer DB sorgusunu denetler.
-Native mod, rehberdeki yan yana ABI-3 native kaynaklarını gerektirir;
-`native-provider` ile `native-static-consumer` eşleşir. Katalog RPC'si ve doğrudan
-SQL değişikliğiyle aynı cache hattı denetlenir; müşteri command veya DB RPC desteği
-**yoktur**. Writer'ın sorumluluğu iki modda da değişmez.
-
-İki mod da beş sınırlı RSS örneği alır; kanıtlar ortak üst dizinin `.tmp/wp3-*`
-alanındadır. Varsayılan cleanup yalnız o benzersiz smoke stack/volume'ünü siler;
-`--keep` / `-Keep` korur. Hatada `containers.log` ve `result.properties` dosyalarını
-inceleyin. Doğal uygulama örneği SQL, dönüşüm ve fenced yayını ayırır; minimal
-benchmark düzeneği değildir. Tek DB/Redis kullanan demo HA değildir. Tanımlı limit,
-runtime RSS, sürekli throughput veya p99 kabulünün sağlandığını kanıtlamaz.
+Dört örneği PostgreSQL ve Redis ile birlikte çalıştırmak için [ortak Compose kurulumunu](https://github.com/esasmer-dou/rest-sample-cache-reader/blob/master/README.tr.md#compose) izleyin.
 
 ## 0.8.3 İle Başlayın
 
@@ -493,4 +460,3 @@ Açmadan önce işin çalışma süresini ayrıca ölçün.
 - [Production ayarları](src/main/resources/config/production.properties)
 - [Advanced tuning ayarları](src/main/resources/config/advanced-tuning.properties)
 - [v0.8.0 sürüm notları](docs/RELEASE_NOTES_v0.8.0.tr.md)
-- [Henüz yayımlanmamış belge düzeltmeleri](docs/RELEASE_NOTES_UNRELEASED.tr.md)

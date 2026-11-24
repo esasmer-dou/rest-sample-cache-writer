@@ -10,41 +10,9 @@ Java business code and native ABIs are unchanged. Upgrade the aligned dependenci
 
 ## Compose
 
-This 0.8.3 sample uses REST/platform 4.9.0 and the relevant cache or Dubbo 0.9.2 package. The Compose commands below are for local development. Release qualification runs on EmaTech; Windows and ARM execution checks are separate compatibility tests. A compiled platform artifact does not imply load-test qualification on that platform.
+Use [Quick Start](#quick-start) to run this sample on its own.
 
-The shared topology lives in sibling `rest-sample-cache-reader/docker/compose/`.
-See the [full Compose guide](https://github.com/esasmer-dou/rest-sample-cache-reader/blob/master/README.md#compose).
-Keep all four sample checkouts under one parent with their repository names.
-Use Linux/amd64 Docker Engine, Compose v2 with `--wait`, JDK 21/Maven and resolvable
-aligned dependencies. Bash needs `curl`, `jq`, `timeout`; PowerShell needs version 7.
-From this repository's root:
-
-```bash
-bash ../rest-sample-cache-reader/scripts/verify-compose-topology.sh --prepare
-# Alternative: catalog-only native provider + native-static-consumer
-bash ../rest-sample-cache-reader/scripts/verify-compose-topology.sh --prepare --native-provider
-```
-
-PowerShell: `pwsh -File ../rest-sample-cache-reader/scripts/verify-compose-topology.ps1 -Prepare`
-(add `-NativeProvider` for the alternative). Preparation packages all four samples
-with tests skipped and copies runtime dependencies. Each of PostgreSQL with seed,
-Redis 7, writer, reader, provider and consumer has 1 CPU / 128 MiB limits; apps use
-OpenJ9 Java 21/JNI. Reader is at `127.0.0.1:18081`, consumer at `127.0.0.1:18082`.
-Writer has no HTTP API; health requires live fenced projection pointers in Redis.
-
-Full smoke sends POST/PATCH through consumer/provider to PostgreSQL, then checks
-writer-to-fenced-Redis-to-reader convergence and consumer DB reads. Native mode
-requires the sibling ABI-3 native resources described in the guide and pairs
-`native-provider` with `native-static-consumer`. It checks catalog RPC and the same
-cache pipeline using direct SQL mutations; it does **not** support customer command
-or DB RPC. This writer's responsibilities are unchanged in either mode.
-
-Both modes check five bounded RSS samples; evidence is in the shared parent's
-`.tmp/wp3-*`. Default cleanup removes only that unique smoke stack/volume;
-`--keep` / `-Keep` retains it. Inspect `containers.log` and `result.properties` on
-failure. This idiomatic application separates SQL, mapping and fenced publication;
-it is not a minimal benchmark fixture. The single-DB/Redis demo is not HA, and
-configured limits do not prove runtime RSS, sustained throughput or p99 acceptance.
+To run all four samples with PostgreSQL and Redis, follow the [shared Compose setup](https://github.com/esasmer-dou/rest-sample-cache-reader/blob/master/README.md#compose).
 
 ## Start With 0.8.3
 
@@ -489,4 +457,3 @@ your job duration separately before enabling it.
 - [Production settings](src/main/resources/config/production.properties)
 - [Advanced tuning](src/main/resources/config/advanced-tuning.properties)
 - [v0.8.0 release notes](docs/RELEASE_NOTES_v0.8.0.md)
-- [Unreleased documentation corrections](docs/RELEASE_NOTES_UNRELEASED.md)
